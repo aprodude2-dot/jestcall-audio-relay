@@ -122,18 +122,25 @@ async function handlePost(req,res,url){
     try{if(await isBlocked(to))return send(res,403,{error:"This destination is on the Zilos Tools do-not-call list."})}
     catch{return send(res,500,{error:"Could not check the do-not-call list."})}
     if(!BRIDGE_KEY)return send(res,503,{error:"Bridge key is not configured."});
-    if(!process.env.VONAGE_APPLICATION_ID||!process.env.VONAGE_PRIVATE_KEY)return send(res,503,{error:"Vonage application credentials are not configured for this deployment."});
+    if(!process.env.VONAGE_APPLICATION_ID||!keyReady())return send(res,503,{error:"Vonage application credentials are not configured for this deployment."});
     const session=crypto.randomUUID(),host=hostFor(req);
-    const name=String(b.recipient_name||"friend").trim().slice(0,32);
-    const scenario=String(b.scenario||"Friendly mix-up").trim().slice(0,80);
-    const detail=String(b.detail||"").trim().slice(0,180);
+    const name=String(b.recipient_name||"friend").trim().slice(0,80);
+    const scenarioFull=String(b.scenario||"Friendly mix-up").trim().slice(0,12000);
+    const detailFull=String(b.detail||"").trim().slice(0,6500);
     const voice=String(b.voice||"Puck").trim().slice(0,40);
     const accent=String(b.accent||"American").trim().slice(0,40);
+    const ai_model=String(b.ai_model||"openai:gpt-5.6-luna").trim().slice(0,80);
+    const prompt_id=crypto.randomUUID();
+    try{
+      await put("call-prompts/"+prompt_id+".json",JSON.stringify({id:prompt_id,created_at:new Date().toISOString(),scenario:scenarioFull,detail:detailFull,recipient_name:name,ai_model,voice,accent}),{access:"private",contentType:"application/json",allowOverwrite:true});
+    }catch(e){return send(res,500,{error:"Could not store call prompt."});}
+    const scenario=scenarioFull.slice(0,80);
+    const detail="";
     const wsUrl="wss://"+host+"/api/audio-config";
     const evUrl="https://"+host+"/api/audio-config?mode=vonage-event&session="+encodeURIComponent(session)+"&sig="+eventSig(session);
     const ncco=[{action:"connect",endpoint:[{
       type:"websocket",uri:wsUrl,"content-type":"audio/l16;rate=16000",
-      headers:{session_id:session,recipient_name:name,scenario,detail,voice,accent,to_number:to},
+      headers:{session_id:session,recipient_name:name,scenario,detail,voice,accent,ai_model,prompt_id,to_number:to},
       authorization:{type:"custom",value:"Bearer "+BRIDGE_KEY}
     }]}];
     let jwt;
@@ -215,7 +222,7 @@ wss.on("connection",(client,req)=>{
       upstream.send(JSON.stringify({event:"connected",protocol:"Call",version:"0.2.0"}));
       upstream.send(JSON.stringify({event:"start",sequenceNumber:String(seq),start:{
         streamSid:relayId,accountSid:"vonage",callSid:relayId,tracks:["inbound"],
-        customParameters:{recipient_name:String(meta.recipient_name||""),scenario:String(meta.scenario||""),detail:String(meta.detail||""),voice:String(meta.voice||"Puck"),accent:String(meta.accent||"American"),to_number:String(meta.to_number||""),provider:"vonage"},
+        customParameters:{recipient_name:String(meta.recipient_name||""),scenario:String(meta.scenario||""),detail:String(meta.detail||""),voice:String(meta.voice||"Puck"),accent:String(meta.accent||"American"),ai_model:String(meta.ai_model||"openai:gpt-5.6-luna"),prompt_id:String(meta.prompt_id||""),to_number:String(meta.to_number||""),provider:"vonage"},
         mediaFormat:{encoding:"audio/x-mulaw",sampleRate:8000,channels:1}
       }}));
       ready=true;while(pending.length)sendUp(pending.shift());

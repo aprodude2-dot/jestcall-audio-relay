@@ -1,4 +1,4 @@
-const crypto=require("crypto");const {list}=require("@vercel/blob");const {authHeader,space,okAccess,normalizePhone,sw}=require("./_signalwire");
+const crypto=require("crypto");const {list,put}=require("@vercel/blob");const {authHeader,space,okAccess,normalizePhone,sw}=require("./_signalwire");
 const BRIDGE_KEY=String(process.env.BRIDGE_KEY||"");
 function pathFor(phone){return "blocked/"+crypto.createHash("sha256").update("jestcall-block:"+phone).digest("hex")+".json"}
 async function isBlocked(phone){const p=pathFor(phone),o=await list({prefix:p,limit:1});return Array.isArray(o.blobs)&&o.blobs.some(b=>b.pathname===p)}
@@ -35,9 +35,19 @@ module.exports=async function(req,res){
    }
    if(!BRIDGE_KEY)return res.status(503).json({error:"Relay bridge key is not configured."});
    const owned=await signalwireOwned();if(!owned.includes(from))return res.status(400).json({error:"That SignalWire outbound number was not found in this account."});
-   const name=String(b.recipient_name||"friend").slice(0,32),scenario=String(b.scenario||"Friendly mix-up").slice(0,80),detail=String(b.detail||"").slice(0,180),voice=String(b.voice||"Puck").slice(0,40),accent=String(b.accent||"American").slice(0,40);
-   const sig=sigFor([to,name,scenario,detail,voice,accent]),host=String(req.headers["x-forwarded-host"]||req.headers.host||"zilostools.vercel.app").split(",")[0].trim();
-   const qs=new URLSearchParams({to,name,scenario,detail,voice,accent,sig}),url="https://"+host+"/api/swml?"+qs.toString();
+   const name=String(b.recipient_name||"friend").slice(0,80);
+   const scenarioFull=String(b.scenario||"Friendly mix-up").slice(0,12000);
+   const detailFull=String(b.detail||"").slice(0,6500);
+   const voice=String(b.voice||"Puck").slice(0,40),accent=String(b.accent||"American").slice(0,40),ai_model=String(b.ai_model||"openai:gpt-5.6-luna").slice(0,80);
+   // Store full prompt server-side; only pass a short id through the provider URL.
+   const prompt_id=crypto.randomUUID();
+   try{
+     await put("call-prompts/"+prompt_id+".json",JSON.stringify({id:prompt_id,created_at:new Date().toISOString(),scenario:scenarioFull,detail:detailFull,recipient_name:name,ai_model,voice,accent}),{access:"private",contentType:"application/json",allowOverwrite:true});
+   }catch(e){console.error("prompt_store_failed",e.message);return res.status(500).json({error:"Could not store call prompt."});}
+   const scenario=scenarioFull.slice(0,80); // short label only for URL/signature
+   const detail="";
+   const sig=sigFor([to,name,scenario,detail,voice,accent,ai_model,prompt_id]),host=String(req.headers["x-forwarded-host"]||req.headers.host||"zilostools.vercel.app").split(",")[0].trim();
+   const qs=new URLSearchParams({to,name,scenario,detail,voice,accent,ai_model,prompt_id,sig}),url="https://"+host+"/api/swml?"+qs.toString();
    console.log("signalwire_dial_start",from);
    const {r,data}=await sw({command:"dial",params:{from,to,url}});
    console.log("signalwire_dial_result",r.status,JSON.stringify(data).slice(0,2000));
