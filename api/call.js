@@ -18,6 +18,9 @@ async function telnyxOwned(){
  return Array.isArray(d.data)?d.data:[];
 }
 module.exports=async function(req,res){
+  // Reuse this function for the prompt-store endpoint to stay within Vercel Hobby limits.
+  const qs=new URL(req.url||"/","http://local").searchParams;
+  if(String(req.query?.__prompt_store||qs.get("__prompt_store")||"")==="1")return require("../lib/prompt-store-handler")(req,res);
  res.setHeader("Cache-Control","no-store");if(req.method!=="POST")return res.status(405).json({error:"POST required."});
  const b=req.body||{};if(!okAccess(b))return res.status(401).json({error:"Incorrect owner access code."});if(b.authorized!==true)return res.status(400).json({error:"Authorization confirmation is required."});
  const provider=String(b.provider||"signalwire").toLowerCase(),to=normalizePhone(b.to_number),from=normalizePhone(b.from_number);

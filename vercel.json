@@ -1,4 +1,10 @@
 {
+  "rewrites": [
+    {
+      "source": "/api/prompt-store",
+      "destination": "/api/call?__prompt_store=1"
+    }
+  ],
   "functions": {
     "api/transcript.js": {
       "experimentalTriggers": [
