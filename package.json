@@ -1,0 +1,9 @@
+{
+  "name": "jestcall-ai-studio",
+  "private": true,
+  "dependencies": {
+    "@vercel/blob": "2.6.1",
+    "@vercel/queue": "0.5.1",
+    "ws": "8.18.3"
+  }
+}

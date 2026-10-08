@@ -1,0 +1,12 @@
+{
+  "functions": {
+    "api/transcript.js": {
+      "experimentalTriggers": [
+        {
+          "type": "queue/v2beta",
+          "topic": "zilos-scheduled-calls"
+        }
+      ]
+    }
+  }
+}
