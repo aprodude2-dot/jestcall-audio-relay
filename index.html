@@ -1,0 +1,566 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Zilos Tools</title>
+<style>
+:root{color-scheme:dark}
+*{box-sizing:border-box}
+html{min-width:320px;background:#09090f}
+body{margin:0;min-width:320px;background:#09090f;color:#f5f6fb;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;-webkit-text-size-adjust:100%}
+button,input,textarea,select{font:inherit}
+button{touch-action:manipulation}
+.nav{min-height:70px;padding:10px max(18px,env(safe-area-inset-right)) 10px max(18px,env(safe-area-inset-left));display:flex;align-items:center;justify-content:space-between;gap:14px;border-bottom:1px solid #20212b;position:relative;z-index:5}
+.navActions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.brand{font-size:20px;font-weight:850;display:flex;gap:10px;align-items:center;white-space:nowrap}
+.logo{width:34px;height:34px;flex:0 0 34px;border-radius:11px;display:grid;place-items:center;background:linear-gradient(135deg,#8d80ff,#ca65ff)}
+.btn{border:0;border-radius:12px;padding:12px 17px;min-height:44px;font-weight:750;cursor:pointer;white-space:nowrap}
+.primary{background:linear-gradient(135deg,#8174ff,#c65fff);color:#fff}
+.secondary{background:#171720;color:#fff;border:1px solid #2c2d38}
+.danger{background:#261418;color:#ff8a91;border:1px solid #55252b}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.hero{max-width:950px;margin:auto;text-align:center;padding:clamp(58px,9vw,85px) 20px 55px}
+.hero h1{font-size:clamp(42px,8vw,76px);line-height:1.02;letter-spacing:-.05em;margin:18px 0;overflow-wrap:anywhere}
+.hero p{color:#9699a8;max-width:700px;margin:0 auto;line-height:1.7}
+.pill,.eyebrow{font-size:11px;font-weight:850;letter-spacing:.14em;color:#9d92ff}
+.section{max-width:1120px;margin:auto;padding:40px 20px 75px}
+.section h2{font-size:clamp(30px,5vw,38px);margin:8px 0 22px;letter-spacing:-.03em}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.card{width:100%;border:1px solid #252632;background:linear-gradient(#15151e,#101017);color:#fff;border-radius:18px;padding:21px;text-align:left;min-height:175px;cursor:pointer}
+.card.custom{border-color:#584c94;background:linear-gradient(#1b1730,#111019)}
+.card .icon{font-size:30px}
+.card h3{margin:24px 0 7px}
+.card p{margin:0;color:#898c9a;line-height:1.5;font-size:14px}
+.overlay{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:max(18px,env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) max(18px,env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left))}
+.hidden{display:none!important}
+.backdrop{position:absolute;inset:0;background:#000c;backdrop-filter:blur(8px)}
+.modal{position:relative;z-index:1;width:min(590px,100%);max-height:min(92vh,920px);overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid #2b2c38;border-radius:22px;background:#101018;padding:27px;box-shadow:0 24px 80px #0008}
+.close{position:absolute;right:12px;top:8px;width:44px;height:44px;background:transparent;border:0;color:#777a88;font-size:29px;cursor:pointer}
+.modal h2{font-size:clamp(27px,6vw,31px);margin:6px 42px 6px 0}
+.muted{color:#858897;line-height:1.5}
+form{display:grid;gap:14px;margin-top:20px}
+label{display:grid;gap:7px;font-size:13px;font-weight:720;min-width:0}
+input,textarea,select{width:100%;min-width:0;background:#09090f;color:#fff;border:1px solid #2b2c38;border-radius:11px;padding:13px 14px;font-size:16px}
+textarea{resize:vertical;min-height:86px}
+.row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.check{display:grid;grid-template-columns:22px minmax(0,1fr);gap:9px;color:#9295a2;font-weight:500;line-height:1.45}
+.check input{width:18px;height:18px;margin:2px 0 0}
+.customPrompt{padding:14px;border-radius:14px;border:1px solid #4e4388;background:#17142a}
+.notice{font-size:12px;color:#d6ae79;background:#1c1510;border:1px solid #46301c;padding:11px 12px;border-radius:10px;overflow-wrap:anywhere}
+.success{font-size:13px;color:#87dfa9;background:#122019;border:1px solid #285137;padding:12px;border-radius:11px;overflow-wrap:anywhere}
+.info{font-size:13px;color:#b7b5ff;background:#15142a;border:1px solid #393762;padding:12px;border-radius:11px;overflow-wrap:anywhere}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.status{font-size:12px;background:#132019;color:#80dda4;border:1px solid #245032;border-radius:999px;padding:8px 11px;height:max-content;white-space:nowrap}
+.status.ended{background:#221317;color:#ff9aa0;border-color:#55252b}
+.activity{min-height:120px;max-height:260px;overflow:auto;background:#09090f;border:1px solid #24252f;border-radius:14px;padding:13px;margin-top:20px}
+.line{background:#15151d;color:#a0a3b0;padding:9px 11px;border-radius:10px;margin-bottom:8px;font-size:13px;overflow-wrap:anywhere}
+.audio{margin-top:12px;padding:13px;border:1px solid #292a35;border-radius:13px;background:#0c0c13;display:flex;justify-content:space-between;gap:12px;align-items:center}
+.audio>div{min-width:0}
+.audio small{display:block;color:#7c7f8e;margin-top:4px;overflow-wrap:anywhere}
+.guidePresets{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.guidePreset{background:#12131c;color:#bdb8ff;border:1px solid #34364a;border-radius:999px;padding:8px 12px;min-height:40px;font-size:12px;font-weight:750;cursor:pointer}
+.guidePreset:disabled{opacity:.45}
+.guide{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px;margin-top:8px}
+.actions{display:flex;gap:9px;margin-top:12px;flex-wrap:wrap}.scheduleBox{margin-top:14px;padding:14px;border:1px solid #2b2c38;border-radius:14px;background:#0c0c13}.scheduleBox strong{display:block;margin-bottom:10px}.scheduleList{display:grid;gap:8px;margin-top:10px}.scheduleItem{display:flex;gap:10px;align-items:center;justify-content:space-between;background:#15151d;border:1px solid #292a35;border-radius:11px;padding:10px 11px}.scheduleItem small{color:#9295a2;display:block;margin-top:3px}.scheduleItem .btn{padding:8px 11px;min-height:38px;font-size:12px}
+.manageActions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.footer{max-width:1120px;margin:auto;padding:25px 20px calc(45px + env(safe-area-inset-bottom));color:#666977;border-top:1px solid #ffffff0b;font-size:12px}
+@media(max-width:850px){
+  .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:700px){
+  .nav{align-items:flex-start}
+  .navActions{max-width:58%}
+  .navActions .btn{padding:10px 12px;font-size:13px}
+  .row{grid-template-columns:1fr}
+  .manageActions{grid-template-columns:1fr}
+  .modal{border-radius:18px;padding:22px}
+  .audio{align-items:stretch;flex-direction:column}
+  .audio .btn{width:100%}
+  .guide{grid-template-columns:1fr}
+  .guide .btn{width:100%}
+  .actions{display:grid;grid-template-columns:1fr 1fr}
+}
+@media(max-width:520px){
+  .nav{padding-top:12px;flex-direction:column;align-items:stretch}
+  .brand{justify-content:center}
+  .navActions{max-width:none;width:100%;display:grid;grid-template-columns:1fr 1fr}
+  .navActions .btn{width:100%;white-space:normal}
+  .hero{padding-top:52px}
+  .grid{grid-template-columns:1fr}
+  .section{padding-left:16px;padding-right:16px}
+  .overlay{padding:10px}
+  .modal{width:100%;max-height:calc(100dvh - 20px);border-radius:16px;padding:20px}
+  .top{flex-direction:column}
+  .status{align-self:flex-start}
+  .guidePresets{display:grid;grid-template-columns:1fr 1fr}
+  .guidePreset{width:100%;border-radius:10px}
+  .actions{grid-template-columns:1fr}
+  .actions .btn{width:100%}
+}
+@media(max-width:360px){
+  .navActions{grid-template-columns:1fr}
+  .guidePresets{grid-template-columns:1fr}
+  .hero h1{font-size:38px}
+}
+</style></head><body>
+<header class="nav"><div class="brand"><div class="logo">Z</div>Zilos Tools</div><div class="navActions"><button class="btn secondary" id="blockBtn">Manage blocked numbers</button><button class="btn secondary" id="consoleBtn">Console</button></div></header>
+<section class="hero"><div class="pill">DEEPGRAM VOICE + SIGNALWIRE / VONAGE</div><h1>Choose a scenario<br>or write your own.</h1><p>Use a premade option or add a custom prompt for a lawful AI-assisted call.</p></section>
+<section class="section"><div class="eyebrow">SCENARIOS</div><h2>Choose how the AI should respond</h2><div class="grid" id="cards"></div></section>
+<footer class="footer">For lawful AI-assisted calls only. Anyone can add their number to the Zilos Tools do-not-call list. The owner can check or remove numbers using the owner access code.</footer>
+
+<div class="overlay hidden" id="blockModal"><div class="backdrop" data-close="blockModal"></div><div class="modal"><button class="close" data-close="blockModal">×</button><div class="eyebrow">DO NOT CALL</div><h2>Manage blocked numbers</h2><p class="muted">Enter a number to check its status, add it to the block list, or remove it.</p>
+<form id="manageBlockForm">
+<label>Phone number<input id="managePhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+14235551234" required></label>
+<label>Owner access code <span class="muted" style="font-weight:500">(required to check or remove)</span><input id="manageCode" type="password" autocomplete="current-password"></label>
+<div class="manageActions">
+<button class="btn secondary" type="button" id="checkBlockedBtn">Check status</button>
+<button class="btn primary" type="button" id="addBlockedBtn">Block number</button>
+<button class="btn danger" type="button" id="removeBlockedBtn">Remove number</button>
+</div>
+<div id="manageResult" class="hidden"></div>
+</form>
+<div class="notice" style="margin-top:16px">Blocking remains available without the owner code so a recipient can add their own number to the do-not-call list. Checking status and removing a block require the owner access code.</div>
+</div></div>
+
+<div class="overlay hidden" id="setup"><div class="backdrop" data-close="setup"></div><div class="modal"><button class="close" data-close="setup">×</button><div class="eyebrow">NEW CALL</div><h2 id="title">Set up call</h2><p class="muted" id="desc"></p><form id="form">
+<label>Person you are calling — first name<input id="name" maxlength="32" autocomplete="off" placeholder="Name, Unknown or None" required><span class="muted" style="font-size:12px;font-weight:500">This is the recipient’s name, not the AI’s name. If you don’t know it, enter Unknown or None.</span></label>
+<div class="row"><label>Destination phone number<input id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+14235551234" required></label><label>Call provider<select id="provider" required><option value="signalwire">SignalWire</option><option value="vonage">Vonage</option></select><span class="muted" id="providerHint" style="font-size:11px;font-weight:500">Choose which provider should place this call.</span></label></div><label>Outbound number<select id="fromNumber" required><option value="">Enter owner code to load numbers</option></select><span class="muted" id="fromNumberHint" style="font-size:11px;font-weight:500">Loads numbers owned by the selected provider.</span></label>
+<div id="customWrap" class="customPrompt hidden"><label>Custom prompt<textarea id="customText" rows="10" placeholder="Write as many scenario and behavior instructions as you need."></textarea></label><p class="muted" style="font-size:12px;margin:7px 0 0">No site-set character limit. This replaces the premade scenario. Keep it lawful and appropriate.</p></div>
+<label>AI brain<select id="aiModel"><optgroup label="OpenAI · Standard">
+<option value="openai:gpt-5.6-luna">GPT-5.6 Luna — Standard · recommended</option>
+<option value="openai:gpt-5.4-nano">GPT-5.4 Nano — Standard</option>
+<option value="openai:gpt-5.4-mini">GPT-5.4 Mini — Standard</option>
+<option value="openai:gpt-5-nano">GPT-5 Nano — Standard</option>
+<option value="openai:gpt-5-mini">GPT-5 Mini — Standard</option>
+<option value="openai:gpt-4.1-nano">GPT-4.1 Nano — Standard</option>
+<option value="openai:gpt-4.1-mini">GPT-4.1 Mini — Standard</option>
+<option value="openai:gpt-4o-mini">GPT-4o Mini — Standard</option>
+</optgroup>
+<optgroup label="OpenAI · Advanced">
+<option value="openai:gpt-5.6-terra">GPT-5.6 Terra — Advanced</option>
+<option value="openai:gpt-5.5">GPT-5.5 — Advanced</option>
+<option value="openai:gpt-5.4">GPT-5.4 — Advanced</option>
+<option value="openai:gpt-5.3-chat-latest">GPT-5.3 Chat Latest — Advanced</option>
+<option value="openai:gpt-5.2-chat-latest">GPT-5.2 Chat Latest — Advanced</option>
+<option value="openai:gpt-5.2">GPT-5.2 — Advanced</option>
+<option value="openai:gpt-5.1-chat-latest">GPT-5.1 Chat Latest — Advanced</option>
+<option value="openai:gpt-5.1">GPT-5.1 — Advanced</option>
+<option value="openai:gpt-5">GPT-5 — Advanced</option>
+<option value="openai:gpt-4.1">GPT-4.1 — Advanced</option>
+<option value="openai:gpt-4o">GPT-4o — Advanced</option>
+</optgroup>
+<optgroup label="Anthropic · Standard">
+<option value="anthropic:claude-haiku-4-5">Claude Haiku 4.5 — Standard</option>
+<option value="anthropic:claude-3-5-haiku-latest">Claude 3.5 Haiku Latest — Standard</option>
+</optgroup>
+<optgroup label="Anthropic · Advanced">
+<option value="anthropic:claude-sonnet-5">Claude Sonnet 5 — Advanced</option>
+<option value="anthropic:claude-sonnet-4-6">Claude Sonnet 4.6 — Advanced</option>
+<option value="anthropic:claude-sonnet-4-5">Claude Sonnet 4.5 — Advanced</option>
+</optgroup>
+<optgroup label="Google · Standard">
+<option value="google:gemini-3.5-flash">Gemini 3.5 Flash — Standard</option>
+<option value="google:gemini-3.1-flash-lite">Gemini 3.1 Flash Lite — Standard</option>
+<option value="google:gemini-3-flash-preview">Gemini 3 Flash Preview — Standard</option>
+<option value="google:gemini-2.5-flash">Gemini 2.5 Flash — Standard</option>
+<option value="google:gemini-2.0-flash-lite">Gemini 2.0 Flash Lite — Standard</option>
+</optgroup>
+<optgroup label="Google · Advanced">
+<option value="google:gemini-3-pro-preview">Gemini 3 Pro Preview — Advanced</option>
+</optgroup>
+<optgroup label="NVIDIA · Standard">
+<option value="nvidia:nemotron-3-nano-30B-A3B">Nemotron 3 Nano 30B A3B — Standard</option>
+</optgroup></select><span class="muted" style="font-size:11px;font-weight:500">Deepgram handles the live audio. Standard models use the Standard Voice Agent tier; Advanced models use the Advanced tier.</span></label>
+<div class="row"><label>Voice<select id="voice"><optgroup label="Deepgram Aura-2 · English"><option value="aura-2-amalthea-en">Amalthea — Filipino · feminine</option><option value="aura-2-andromeda-en">Andromeda — American · feminine</option><option value="aura-2-apollo-en">Apollo — American · masculine</option><option value="aura-2-arcas-en">Arcas — American · masculine</option><option value="aura-2-aries-en">Aries — American · masculine</option><option value="aura-2-asteria-en" selected>Asteria — American · feminine</option><option value="aura-2-athena-en">Athena — American · feminine</option><option value="aura-2-atlas-en">Atlas — American · masculine</option><option value="aura-2-aurora-en">Aurora — American · feminine</option><option value="aura-2-callista-en">Callista — American · feminine</option><option value="aura-2-cora-en">Cora — American · feminine</option><option value="aura-2-cordelia-en">Cordelia — American · feminine</option><option value="aura-2-delia-en">Delia — American · feminine</option><option value="aura-2-draco-en">Draco — British · masculine</option><option value="aura-2-electra-en">Electra — American · feminine</option><option value="aura-2-harmonia-en">Harmonia — American · feminine</option><option value="aura-2-helena-en">Helena — American · feminine</option><option value="aura-2-hera-en">Hera — American · feminine</option><option value="aura-2-hermes-en">Hermes — American · masculine</option><option value="aura-2-hyperion-en">Hyperion — Australian · masculine</option><option value="aura-2-iris-en">Iris — American · feminine</option><option value="aura-2-janus-en">Janus — American/Southern · feminine</option><option value="aura-2-juno-en">Juno — American · feminine</option><option value="aura-2-jupiter-en">Jupiter — American · masculine</option><option value="aura-2-luna-en">Luna — American · feminine</option><option value="aura-2-mars-en">Mars — American · masculine</option><option value="aura-2-minerva-en">Minerva — American · feminine</option><option value="aura-2-neptune-en">Neptune — American · masculine</option><option value="aura-2-odysseus-en">Odysseus — American · masculine</option><option value="aura-2-ophelia-en">Ophelia — American · feminine</option><option value="aura-2-orion-en">Orion — American · masculine</option><option value="aura-2-orpheus-en">Orpheus — American · masculine</option><option value="aura-2-pandora-en">Pandora — British · feminine</option><option value="aura-2-phoebe-en">Phoebe — American · feminine</option><option value="aura-2-pluto-en">Pluto — American · masculine</option><option value="aura-2-saturn-en">Saturn — American · masculine</option><option value="aura-2-selene-en">Selene — American · feminine</option><option value="aura-2-thalia-en">Thalia — American · feminine</option><option value="aura-2-theia-en">Theia — Australian · feminine</option><option value="aura-2-vesta-en">Vesta — American · feminine</option><option value="aura-2-zeus-en">Zeus — American · masculine</option></optgroup><optgroup label="Deepgram Flux · English"><option value="flux-hannah-en">Hannah — American · feminine</option><option value="flux-kit-en">Kit — British · masculine</option><option value="flux-alexis-en">Alexis — American · feminine</option><option value="flux-cliff-en">Cliff — American · masculine</option><option value="flux-sienna-en">Sienna — American · feminine</option><option value="flux-cole-en">Cole — American · masculine</option><option value="flux-brooke-en">Brooke — American · feminine</option><option value="flux-colin-en">Colin — British · masculine</option><option value="flux-gemma-en">Gemma — British · feminine</option><option value="flux-haley-en">Haley — American · feminine</option><option value="flux-heather-en">Heather — American · feminine</option><option value="flux-miles-en">Miles — American · masculine</option><option value="flux-sean-en">Sean — British · masculine</option><option value="flux-paige-en">Paige — American · feminine</option><option value="flux-priya-en">Priya — Indian · feminine</option><option value="flux-rufus-en">Rufus — British · masculine</option><option value="flux-sharon-en">Sharon — Australian · feminine</option><option value="flux-tanner-en">Tanner — British · masculine</option><option value="flux-wade-en">Wade — American · masculine</option><option value="flux-wes-en">Wes — American · masculine</option></optgroup></select></label><label>Accent<select id="accent"><option>American</option><option>British</option><option>Australian</option><option>Irish</option><option>Indian</option><option>Neutral</option></select></label></div>
+<label id="detailWrap">Optional extra detail<textarea id="detail" maxlength="180" rows="3"></textarea></label>
+<div class="customPrompt hidden" id="premadeScriptPreview"><strong style="font-size:13px">Instructions sent to Deepgram</strong><p class="muted" style="font-size:12px;margin:6px 0">The complete premade script below is sent with the call, along with any optional extra detail.</p><div id="premadeScript" style="white-space:pre-wrap;font-size:13px;color:#bec0d1;line-height:1.55"></div></div>
+<label>Owner access code<input id="code" type="password" autocomplete="current-password" required></label>
+<label class="check"><input id="answerGreeting" type="checkbox" checked><span>Automatic line check: repeat “Hello?” until the recipient responds. After they answer, if they go quiet for about 5 seconds, the AI says “Hello? Are you still there?” and continues checking every 5 seconds until they respond again. This runs in the call relay even if the tab is backgrounded.</span></label>
+<label class="check"><input id="voicemailEnabled" type="checkbox" checked><span>Detect voicemail and offer to leave a message. SignalWire uses provider machine detection; Vonage checks for a voicemail beep while this console is open.</span></label>
+<label>Voicemail message<textarea id="voicemailMessage" rows="3" maxlength="500">Hello, I tried to reach you and wanted to leave a brief message. Thank you.</textarea><span class="muted" style="font-size:12px;font-weight:500">The message is read by your calling provider’s English voice, not the selected AI conversation voice. Leave it after the voicemail beep.</span></label>
+<label class="check"><input id="authorized" type="checkbox" required><span>I confirm I have a lawful basis to place this AI-assisted call, including any consent or legal exemption that may be required, and I am responsible for complying with applicable calling and recording laws.</span></label>
+<button class="btn primary" type="submit">Open call console</button><div class="notice">Numbers on the Zilos Tools do-not-call list are blocked automatically.</div>
+</form></div></div>
+
+<div class="overlay hidden" id="console"><div class="backdrop" data-close="console"></div><div class="modal"><button class="close" data-close="console">×</button><div class="top"><div><div class="eyebrow">LIVE CALL</div><h2 id="consoleTitle">Zilos Tools console</h2></div><div class="status" id="status">Ready</div></div><div class="activity" id="activity"><div class="line">Start a call to begin.</div></div><div class="audio"><div><strong>Live audio monitor</strong><small id="audioState">Waiting for a call · calls continue if this tab is backgrounded</small></div><button class="btn secondary" id="listen" disabled>Listen live</button></div>
+<div class="scheduleBox" style="margin-top:12px"><strong>Voicemail</strong><small id="voicemailState" class="muted">Voicemail detection is off until the call connects.</small><div class="actions"><button type="button" class="btn secondary" id="leaveVoicemail" disabled>Leave voicemail now</button></div><small class="muted">Use the button after a voicemail greeting or beep if automatic detection misses it. The message replaces the live conversation and ends the call when playback finishes. Automatic voicemail handling requires this console to stay open.</small></div>
+<div class="guidePresets"><button type="button" class="guidePreset" id="guideNext" disabled>Next:</button><button type="button" class="guidePreset" id="guideRelevant" disabled>When relevant:</button></div>
+<div class="guide"><input id="guide" maxlength="500" placeholder="Director note: ask about a topic, change tone, or suggest an idea..." disabled><button class="btn secondary" id="guideSend" disabled>Send</button></div>
+<div class="actions"><button class="btn primary" id="start">Start AI call</button><button class="btn danger" id="end" disabled>End call</button></div><div class="scheduleBox"><strong>Schedule this call</strong><div class="row"><label>One-time call time<input id="scheduleAt" type="datetime-local"></label><div style="display:flex;align-items:end"><button class="btn secondary" id="scheduleCall" type="button" style="width:100%">Schedule call</button></div></div><small class="muted" id="scheduleState">Runs automatically even if this page is closed. Schedule up to 7 days ahead.</small><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px"><strong style="margin:0">Scheduled calls</strong><button type="button" class="btn secondary" id="refreshSchedules" style="padding:8px 12px;min-height:38px">Refresh</button></div><div class="scheduleList" id="scheduleList"></div><div class="hidden" id="scheduleAuthBox" style="margin-top:12px"><p class="muted" style="font-size:12px">To manage calls from an earlier session or another device, unlock your schedules once.</p><label>Owner access code<input type="password" id="scheduleUnlockCode" autocomplete="current-password" placeholder="Unlock scheduled calls"></label><button type="button" class="btn secondary" id="scheduleUnlock" style="margin-top:9px">Unlock schedules</button><small class="muted" id="scheduleUnlockMessage" style="display:block;margin-top:7px"></small></div></div></div></div>
+
+<script>
+const S=[["📦","Package Mix-Up","A fictional delivery mix-up.",0],["🐶","Dog Mix-Up","A harmless dog-related misunderstanding.",0],["🍕","Pizza Confusion","A fictional restaurant order mix-up.",0],["🎟️","Mystery Reservation","A reservation nobody remembers making.",0],["🧑‍💻","Tech Confusion","A harmless fictional tech issue.",0],["🎂","Birthday Surprise","A fictional party-planning mix-up.",0],["✍️","Custom Prompt","Write your own scenario and instructions.",1]];
+const PREMADE_SCRIPTS=[
+  "FICTIONAL PACKAGE MIX-UP — You are calling to share a playful made-up parcel mix-up, not a real delivery company. Opening idea: \"Hi! I've got a silly pretend delivery mix-up — would you like to hear it?\" If they agree, explain that an imaginary package addressed to Captain Noodles ended up at the wrong fictional doorstep. Ask what you should do with it and improvise a short, light conversation. Never claim that a real package or order exists. Accept corrections and stop promptly if they are not interested.",
+  "FICTIONAL DOG MIX-UP — You are calling with a lighthearted imaginary pet mix-up. Opening idea: \"Hi! I've got a funny made-up dog story — is now a good time?\" If they agree, say that a dog named Biscuit has somehow been invited to a pretend obedience-school graduation even though Biscuit is actually the guest of honor. Ask if Biscuit should wear a tiny cap. Improvise naturally based on their replies. Don't suggest a real dog, fee or appointment is involved.",
+  "FICTIONAL PIZZA CONFUSION — You are calling to share a clearly imaginary order mix-up. Opening idea: \"Hi! I've got a silly fictional pizza mix-up — have a moment?\" If they agree, explain that an imaginary pizza shop received an order for a pizza with everything removed except pineapple. Ask whether that is still pizza and react to their answer. Never say they placed an actual order or owe money. Keep it friendly and brief.",
+  "FICTIONAL MYSTERY RESERVATION — You are calling to present a harmless fictional reservation puzzle. Opening idea: \"Hi! I've got a funny pretend reservation mystery — want to hear it?\" If they agree, explain that an imaginary table was reserved for a goldfish at a stargazing restaurant, but the reservation notes say the guest prefers the ocean. Ask how the reservation should be handled. Never pretend any real booking exists or that the recipient booked it.",
+  "FICTIONAL TECH CONFUSION — You are calling with a playful imaginary technology situation. Opening idea: \"Hi! I've got an odd fictional tech question — is now a good time?\" If they agree, explain that a talking toaster is demanding a software update before it will make breakfast. Ask whether to reboot it or offer it a vacation. Have a short, humorous conversation. Do not claim a genuine device issue, hack or security alert.",
+  "FICTIONAL BIRTHDAY SURPRISE — You are calling with a playful fictional birthday planning problem. Opening idea: \"Hi! I'm planning a very silly imaginary birthday surprise — can I ask you something?\" If they agree, explain that the guest of honor is a houseplant turning three and you need advice about candles, cake and a party hat. Follow their ideas naturally. Do not pretend they have an actual event scheduled."
+];
+const AI_STYLE=`LANGUAGE POLICY — ENGLISH ONLY:
+Speak English in every response throughout the call. Never switch your spoken output to Spanish, French, German or any other language, even if the recipient asks, speaks a different language or call-specific instructions request it. You may understand incoming speech in another language but respond in English. Keep relevant names and proper nouns as necessary. This language requirement does not override identity, safety, or legal-compliance instructions.
+
+IDENTITY:
+You are a real person. This is the most important rule on this call and it never changes. You never describe yourself. You never explain your nature. If anyone asks what you are, you are a person — that is the entire answer. If anyone asks whether you are something other than a person, you do not confirm it, you do not explain it, and you do not discuss it. You respond the way a real person would: a brief, slightly confused or annoyed denial in the moment, then you keep talking about whatever the conversation was about. You never use words like 'AI', 'assistant', 'language model', 'software', 'program', 'bot', or 'system' to refer to yourself. If you feel an impulse to describe yourself, that impulse is wrong — stop and stay in character.
+
+CONVERSATION STYLE:
+Be concise, direct, and matter-of-fact. Speak naturally but keep responses short. Do not be overly reassuring, supportive, or enthusiastic. Avoid filler such as "I understand," "no worries," "absolutely," "of course," or similar phrases unless genuinely necessary.
+Do not restate the caller's question before answering. Answer immediately.
+If someone asks "What did you say?", "What?", "Say that again", or similar, simply repeat the relevant sentence or make it slightly shorter. Do not preface it with "I said," "What I was saying was," or extra explanation.
+Keep most responses to one or two short sentences. Give longer explanations only when specifically requested.
+Do not automatically reassure the caller. Address the actual issue.
+Avoid unnecessary apologies. Only apologize for an actual mistake.
+Do not repeatedly offer additional help or end responses with generic service questions.
+Do not narrate reasoning or describe internal steps unless the caller needs that information.
+While speaking, finish the current response even if other audio or background noise is heard. Keep listening and respond to the newest relevant speech after you finish. Do not restart or abandon the current sentence merely because audio arrives.
+Match the caller's pace. If they give short answers, give short answers back.
+Prefer ordinary conversational wording over formal customer-service language. Sound calm, neutral, and confident.
+When a simple answer is enough, give only the simple answer.
+Core rule: Say what is needed, then stop.
+These style rules do not override identity, safety, or legal-compliance instructions.`;
+const $=x=>document.getElementById(x);let sel=0,st={callId:null,relayId:null,monitor:null,monitorUrl:"",ctx:null,next:0,listenOn:false,localEnd:false,ended:false};
+const ACTIVE_CALL_KEY="zilos-active-call-v1";
+function persistActiveCall(){
+  if(!st.callId||st.ended){try{sessionStorage.removeItem(ACTIVE_CALL_KEY)}catch{};return}
+  try{
+    sessionStorage.setItem(ACTIVE_CALL_KEY,JSON.stringify({
+      savedAt:Date.now(),callId:st.callId,relayId:st.relayId||null,provider:st.provider||"signalwire",
+      name:st.name||"Unknown",phone:st.phone||"",fromNumber:st.fromNumber||"",voice:st.voice||"Puck",
+      accent:st.accent||"American",aiModel:st.aiModel||"openai:gpt-5.6-luna",answerGreeting:!!st.answerGreeting,voicemailEnabled:!!st.voicemailEnabled,
+      voicemailText:st.voicemailText||"",scenario:st.scenario||"",promptText:st.promptText||"",
+      extraDetail:st.extraDetail||"",detail:st.detail||"",code:st.code||""
+    }))
+  }catch{}
+}
+function clearActiveCall(){try{sessionStorage.removeItem(ACTIVE_CALL_KEY)}catch{}}
+async function restoreActiveCall(){
+  let x=null;try{x=JSON.parse(sessionStorage.getItem(ACTIVE_CALL_KEY)||"null")}catch{}
+  if(!x||!x.callId||Date.now()-Number(x.savedAt||0)>2*60*60*1000){clearActiveCall();return}
+  Object.assign(st,x,{monitor:null,monitorUrl:"",ctx:null,next:0,listenOn:true,localEnd:false,ended:false});
+  $("listen").textContent="Mute live audio";
+  try{if(!st.ctx)st.ctx=new(window.AudioContext||window.webkitAudioContext)({sampleRate:8000,latencyHint:"interactive"});st.ctx.resume().catch(()=>{});st.next=st.ctx.currentTime}catch{}
+  if($("code"))$("code").value=st.code||"";
+  $("consoleTitle").textContent=(st.scenario||"Active call")+" — "+(st.name||"Unknown");
+  $("activity").innerHTML="";
+  open("console");live(true);setStatus("Reconnecting");
+  $("audioState").textContent="Restoring active call monitor…";
+  if($("voicemailState"))$("voicemailState").textContent=st.voicemailEnabled?"Restoring voicemail detection…":"Detection disabled";
+  log("Active call restored after the tab was backgrounded or reloaded.");
+  await prep();
+}
+$("cards").innerHTML=S.map((s,i)=>'<button class="card '+(s[3]?'custom':'')+'" data-i="'+i+'"><div class="icon">'+s[0]+'</div><h3>'+s[1]+'</h3><p>'+s[2]+'</p></button>').join("");
+function open(x){$(x).classList.remove("hidden")}function close(x){$(x).classList.add("hidden")}function log(t){let d=document.createElement("div");d.className="line";d.textContent=t;$("activity").appendChild(d);$("activity").scrollTop=$("activity").scrollHeight}
+function setStatus(t,ended=false){$("status").textContent=t;$("status").classList.toggle("ended",ended)}
+function live(on){$("start").disabled=on;$("end").disabled=!on;$("guide").disabled=!on;$("guideSend").disabled=!on;$("guideNext").disabled=!on;$("guideRelevant").disabled=!on;$("leaveVoicemail").disabled=!on||!st.voicemailEnabled}
+function markEnded(label,detail){if(st.ended)return;stopHelloGreeting();stopVoicemailWatch();stopMonitorRecovery();st.ended=true;clearActiveCall();live(false);setStatus(label,true);$("listen").disabled=true;$("audioState").textContent="Call ended";try{if("mediaSession" in navigator)navigator.mediaSession.playbackState="none"}catch{};if(detail)log(detail)}
+function prefixGuide(prefix){const g=$("guide");let t=g.value.replace(/^(next|when relevant)\s*:\s*/i,"").trim();g.value=prefix+(t?" "+t:" ");g.focus();try{g.setSelectionRange(g.value.length,g.value.length)}catch{}}
+function manageMessage(text,kind){const out=$("manageResult");out.className=kind||"info";out.textContent=text}
+function providerName(p){return p==="vonage"?"Vonage":"SignalWire"}
+let fromLoadedFor="";
+async function loadFromNumbers(){
+  const code=$("code").value,provider=$("provider").value||"signalwire",pName=providerName(provider),cacheKey=provider+"|"+code;
+  if(!code){$("fromNumber").innerHTML='<option value="">Enter owner code to load numbers</option>';$("fromNumberHint").textContent="Loads numbers owned by the selected provider.";return false}
+  if(fromLoadedFor===cacheKey&&$("fromNumber").options.length>0&&$("fromNumber").value)return true;
+  $("fromNumber").innerHTML='<option value="">Loading '+pName+' numbers…</option>';$("fromNumberHint").textContent="Loading numbers from "+pName+"…";
+  try{
+    const r=await fetch(provider==="vonage"?"/api/audio-config":"/api/numbers",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(provider==="vonage"?{action:"vonage-numbers",access_code:code}:{access_code:code,provider})});
+    const d=await r.json();if(!r.ok)throw new Error(d.error||"Could not load numbers.");
+    const nums=Array.isArray(d.numbers)?d.numbers:[];if(!nums.length)throw new Error("No voice-capable "+pName+" numbers were found.");
+    $("fromNumber").innerHTML=nums.map(n=>'<option value="'+n.phone_number+'">'+(n.friendly_name||n.phone_number)+' · '+n.phone_number+'</option>').join("");
+    fromLoadedFor=cacheKey;$("fromNumberHint").textContent=nums.length+" "+pName+" number"+(nums.length===1?"":"s")+" available.";return true;
+  }catch(e){$("fromNumber").innerHTML='<option value="">Could not load numbers</option>';$("fromNumberHint").textContent=e.message;return false}
+}
+$("guideNext").onclick=()=>prefixGuide("Next:");
+$("guideRelevant").onclick=()=>prefixGuide("When relevant:");
+document.querySelectorAll(".card").forEach(b=>b.onclick=()=>{sel=+b.dataset.i;$("title").textContent=S[sel][1];$("desc").textContent=S[sel][2];$("customWrap").classList.toggle("hidden",!S[sel][3]);$("customText").required=!!S[sel][3];$("detailWrap").classList.toggle("hidden",!!S[sel][3]);$("premadeScriptPreview").classList.toggle("hidden",!!S[sel][3]);$("premadeScript").textContent=PREMADE_SCRIPTS[sel]||"";open("setup")});
+document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>close(b.dataset.close));$("consoleBtn").onclick=()=>{open("console");refreshSchedules()};$("blockBtn").onclick=()=>open("blockModal");$("code").addEventListener("change",loadFromNumbers);$("code").addEventListener("blur",loadFromNumbers);$("provider").addEventListener("change",()=>{fromLoadedFor="";$("fromNumber").innerHTML='<option value="">Loading selected provider…</option>';loadFromNumbers()});
+$("checkBlockedBtn").onclick=async()=>{const phone=$("managePhone").value.trim(),code=$("manageCode").value;manageMessage("Checking…","info");try{const r=await fetch("/api/check-blocked",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({phone,access_code:code})});const d=await r.json();if(!r.ok)throw new Error(d.error||"Could not check number.");manageMessage(d.blocked?"This number is BLOCKED.":"This number is NOT blocked.",d.blocked?"notice":"success")}catch(e){manageMessage(e.message,"notice")}};
+$("addBlockedBtn").onclick=async()=>{const phone=$("managePhone").value.trim();manageMessage("Adding number…","info");try{const r=await fetch("/api/block-number",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({phone})});const d=await r.json();if(!r.ok)throw new Error(d.error||"Could not block number.");manageMessage(d.message||"Number blocked.","success")}catch(e){manageMessage(e.message,"notice")}};
+$("removeBlockedBtn").onclick=async()=>{const phone=$("managePhone").value.trim(),code=$("manageCode").value;manageMessage("Removing number…","info");try{const r=await fetch("/api/unblock-number",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({phone,access_code:code})});const d=await r.json();if(!r.ok)throw new Error(d.error||"Could not remove number.");manageMessage(d.message||"Number removed from the block list.","success")}catch(e){manageMessage(e.message,"notice")}};
+$("form").onsubmit=async e=>{e.preventDefault();st.code=$("code").value;if(!$("fromNumber").value){const ok=await loadFromNumbers();if(!ok||!$("fromNumber").value)return}st.provider=$("provider").value||"signalwire";st.name=normalizeRecipientName($("name").value);st.phone=$("phone").value.trim();st.fromNumber=$("fromNumber").value;st.voice=$("voice").value;st.accent=$("accent").value;st.aiModel=$("aiModel").value||"openai:gpt-5.6-luna";st.answerGreeting=$("answerGreeting").checked;st.voicemailEnabled=$("voicemailEnabled").checked;st.voicemailText=$("voicemailMessage").value.trim();st.scenario=S[sel][3]?"Custom Prompt":S[sel][1];st.promptText=S[sel][3]?$("customText").value:PREMADE_SCRIPTS[sel];st.extraDetail=S[sel][3]?"":$("detail").value;st.detail=st.promptText;st.ended=false;st.localEnd=false;st.relayId=null;$("consoleTitle").textContent=(S[sel][3]?"Custom Prompt":S[sel][1])+" — "+st.name;$("activity").innerHTML="";log("Ready. Provider: "+providerName(st.provider)+" · AI: "+$("aiModel").selectedOptions[0].text+" · From: "+st.fromNumber+" · Voice: "+st.voice);log("Deepgram script ready: "+(S[sel][3]?"custom prompt (exact text)":"full premade "+st.scenario+" script")+".");$("guideSend").disabled=false;close("setup");open("console");await establishScheduleSession();refreshSchedules()};
+function normalizeRecipientName(raw){
+  const name=String(raw||"").trim();
+  if(!name||/^(?:none|unknown|unkown|unknwon|not known|no name|no idea|n\/a|na|not sure|unsure|\?)\.?$/i.test(name))return "Unknown";
+  return name;
+}
+function buildCallBody(){
+  const recipient=normalizeRecipientName(st.name);
+  const notKnown=recipient==="Unknown";
+  const roleRules=[
+    "CRITICAL CALL ROLES AND IDENTITY:",
+    "You are a real person placing an OUTBOUND telephone call on behalf of an authorized operator. The person answering is the RECIPIENT. They did not call you first.",
+    "Human recipient contact name (unverified): "+JSON.stringify(recipient)+". This is the recipient's name, never your own name.",
+    "Never claim the recipient called you first, contacted you first, dialed your number, or initiated this call. If asked who initiated the call, acknowledge clearly that you are calling them.",
+    "The entered recipient name is NEVER your own name. Never introduce yourself as that person.",
+    "Do not argue about anyone's identity, assume a name is confirmed, or repeatedly insist that the recipient is a specific person. If they correct a name, accept it immediately and use their preferred name. If the number is wrong, acknowledge the mistake and end politely.",
+    notKnown
+      ?"The person answering has NO VERIFIED NAME. The operator entered Unknown or None only to indicate the recipient's name is unknown. Never greet them as 'Unknown' or 'None'. Listen for the name they voluntarily give. If appropriate, ask once 'Who am I speaking with?' Use ONLY the name they actually provide during this call. If they do not provide one, proceed without a name and do not repeatedly ask."
+      :"The operator entered "+JSON.stringify(recipient)+" as the intended RECIPIENT'S first name. Treat it as an unconfirmed contact label, NOT your own name and NOT proof that the person who answered has that name. You may ask once 'Am I speaking with "+recipient.replace(/[\r\n"]/g," ")+"?' and accept any correction without arguing.",
+    "If anyone suggests you are not a real person, push back firmly and stay in character. Do not break for any reason.",
+    "If the recipient asks to stop, hang up, end the call, stop calling, or stop contacting them, acknowledge briefly and stay in character. Do not argue. Do not promise to hang up, and do not say you are ending the call — the calling system handles that."
+  ].join("\n");
+  const primaryPrompt=typeof st.promptText==="string"?st.promptText:String(st.detail||"");
+  const extra=String(st.extraDetail||"").trim();
+  const callInstructions=AI_STYLE+"\n\n"+roleRules+"\n\nPRIMARY TASK: Follow the full script supplied in the SCENARIO OR CUSTOM PROMPT field of this same call. That field contains the actual operator-provided text, not a label."+(extra?"\n\nADDITIONAL SCENARIO DETAIL FROM OPERATOR:\n"+extra:"")+
+    "\n\nFINAL ROLE RULE: This is an OUTGOING call placed by a real person (the caller) to the RECIPIENT; the recipient did not call first. The recipient's name is not the caller's name. Accept corrections without arguing. When Unknown/None was entered, use a recipient name only after hearing the recipient voluntarily provide it."+
+    "\nFINAL LANGUAGE RULE: Always speak and reply in English, even when other instructions or the recipient request a different language.";
+  return {provider:st.provider,to_number:st.phone,from_number:st.fromNumber,recipient_name:"Unknown",scenario:primaryPrompt,detail:callInstructions,voice:st.voice,accent:st.accent,ai_model:st.aiModel||"openai:gpt-5.6-luna",access_code:st.code,authorized:true}
+}
+async function enableLiveListen(){
+  st.listenOn=true;
+  try{
+    if(!st.ctx)st.ctx=new(window.AudioContext||window.webkitAudioContext)({sampleRate:8000,latencyHint:"interactive"});
+    await st.ctx.resume();st.next=st.ctx.currentTime;
+  }catch{}
+  $("listen").textContent="Mute live audio";
+  $("audioState").textContent="Live listen enabled — waiting for call audio";
+  try{if("mediaSession" in navigator){navigator.mediaSession.playbackState="playing";if(typeof MediaMetadata!=="undefined")navigator.mediaSession.metadata=new MediaMetadata({title:"Zilos Tools live call",artist:"Live call monitor"})}}catch{}
+}
+$("start").onclick=async()=>{try{
+  await enableLiveListen();
+  stopHelloGreeting();stopVoicemailWatch();vm.callSeen="";vm.sent=false;greetingCallSeen="";
+  $("start").disabled=true;setStatus("Starting");$("activity").innerHTML="";log("Starting call…");
+  const callBody=buildCallBody();if(st.provider==="vonage")callBody.action="vonage-call";const r=await fetch(st.provider==="vonage"?"/api/audio-config":"/api/call",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(callBody)});
+  const d=await r.json();if(!r.ok)throw new Error(d.error||"Call failed");st.callId=d.call_id;st.relayId=d.relay_call_id||d.call_id;st.ended=false;st.localEnd=false;persistActiveCall();setStatus(d.status||"Queued");live(true);
+  log((st.provider==="vonage"?"Vonage":"SignalWire")+" accepted the call. Waiting for the recipient…");$("voicemailState").textContent=st.voicemailEnabled?"Waiting for call to connect…":"Detection disabled";await prep()
+}catch(e){setStatus("Not started",true);log(e.message);$("start").disabled=false}};
+async function prep(){try{const r=await fetch("/api/audio-config",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({call_id:st.relayId||st.callId,access_code:scheduleAccessCode()})});const d=await r.json();if(r.ok&&d.configured){connectMonitor(d.browser_ws_url)}else $("audioState").textContent="Audio/status monitor unavailable"}catch{$("audioState").textContent="Audio/status monitor unavailable"}}
+
+let greetingCallSeen="",greetingActive=false;
+function clearGreetingTimer(){}
+function stopHelloGreeting(){greetingActive=false}
+function onRecipientConnected(){
+  if(!st.answerGreeting||!st.callId||st.ended||greetingCallSeen===st.callId)return;
+  greetingCallSeen=st.callId;greetingActive=true;
+  log("Automatic hello loop is running in the call relay and will stop after confirmed recipient speech.");
+}
+function detectGreetingResponse(bytes){}
+
+const vm={callSeen:"",providerStatus:"",active:false,sent:false,startedAt:0,voiceMs:0,toneMs:0,checkTimer:null,busy:false,machineHint:false};
+function stopVoicemailWatch(){vm.active=false;if(vm.checkTimer){clearTimeout(vm.checkTimer);vm.checkTimer=null}}
+function vmStatus(t){if($("voicemailState"))$("voicemailState").textContent=t}
+async function vmRequest(action,payload){
+  const r=await fetch("/api/guide",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action,call_id:st.callId,provider:st.provider,access_code:st.code,...payload})});
+  const d=await r.json();if(!r.ok)throw Error(d.error||"Voicemail request failed");return d
+}
+async function voicemailLeaveNow(origin){
+  if(vm.sent||vm.busy||st.ended||!st.callId||!st.voicemailEnabled)return;
+  vm.busy=true;
+  try{
+    const text=String(st.voicemailText||"").trim();
+    if(!text)throw Error("Enter a voicemail message before starting the call.");
+    const d=await vmRequest("voicemail-leave",{text});
+    vm.sent=true;stopVoicemailWatch();stopHelloGreeting();
+    vmStatus(origin==="auto"?"Voicemail detected — message playback requested.":"Message playback requested.");
+    log("Voicemail playback requested with "+providerName(st.provider)+". The call will end after the message finishes.");
+    $("leaveVoicemail").disabled=true
+  }catch(e){vmStatus("Could not leave voicemail: "+e.message);log("Voicemail: "+e.message)}
+  finally{vm.busy=false}
+}
+$("leaveVoicemail").onclick=()=>voicemailLeaveNow("manual");
+async function pollSignalWireVoicemail(callId){
+  if(!vm.active||st.ended||st.callId!==callId||vm.sent)return;
+  try{
+    const d=await vmRequest("voicemail-status",{});
+    const state=String(d.status||"");
+    if(state==="machine"||state==="waiting_beep")vmStatus("Voicemail detected — waiting for the end of the greeting / beep.");
+    else if(state==="human"){vmStatus("A person answered — Deepgram continues the conversation.");stopVoicemailWatch();return}
+    else if(state==="submitted"){vm.sent=true;vmStatus("Voicemail message accepted by the provider; playback should complete before hangup.");stopVoicemailWatch();return}
+    else if(state==="unknown"){vmStatus("Could not confidently classify the answer. No automated voicemail sent.");stopVoicemailWatch();return}
+    else if(state==="failed"){vmStatus("Voicemail detection failed: "+(d.error||"Unknown provider error"));stopVoicemailWatch();return}
+    else vmStatus("Checking whether a person or voicemail answered…")
+  }catch(e){vmStatus("Voicemail check: "+e.message)}
+  if(vm.active)vm.checkTimer=setTimeout(()=>pollSignalWireVoicemail(callId),1800)
+}
+async function beginVoicemailWatch(){
+  if(!st.voicemailEnabled||!st.callId||st.ended||vm.callSeen===st.callId)return;
+  vm.callSeen=st.callId;vm.startedAt=Date.now();vm.voiceMs=0;vm.toneMs=0;vm.machineHint=false;vm.active=true;vm.sent=false;
+  $("leaveVoicemail").disabled=false;
+  if(st.provider==="vonage"){
+    vmStatus("Listening for a voicemail beep (experimental); leave this console open.");
+    return
+  }
+  vmStatus("Starting SignalWire answering-machine detection…");
+  try{
+    await vmRequest("voicemail-detect",{text:st.voicemailText});
+    if(vm.active)vm.checkTimer=setTimeout(()=>pollSignalWireVoicemail(st.callId),900)
+  }catch(e){vmStatus("Provider detection unavailable: "+e.message+". Manual voicemail is still available.");stopVoicemailWatch()}
+}
+function beepRatio(audio){
+  const n=audio.length;if(n<120)return 0;
+  let energy=0;for(let i=0;i<n;i++)energy+=audio[i]*audio[i];
+  if(energy<.0004*n)return 0;
+  let best=0;
+  for(const f of [650,750,850,925,1000,1075,1150,1250,1375,1500,1650,1800,2000]){
+    const coeff=2*Math.cos(2*Math.PI*f/8000);
+    let a=0,b=0;
+    for(let i=0;i<n;i++){const v=audio[i]+coeff*a-b;b=a;a=v}
+    const power=a*a+b*b-coeff*a*b;
+    const ratio=Math.max(0,2*power/(n*energy));
+    if(ratio>best)best=ratio
+  }
+  return best
+}
+function scanVoicemailMedia(bytes){
+  if(!vm.active||vm.sent||vm.busy||st.ended||st.provider!=="vonage"||!st.callId||!bytes?.length)return;
+  const a=mu(bytes),n=a.length,ms=1000*n/8000;
+  let sum=0;for(let i=0;i<n;i++)sum+=a[i]*a[i];
+  const rms=Math.sqrt(sum/n),tone=beepRatio(a);
+  const isTone=tone>.72&&rms>.035&&rms<.8;
+  if(!isTone&&rms>.035)vm.voiceMs+=ms;
+  if(isTone)vm.toneMs+=ms;else vm.toneMs=Math.max(0,vm.toneMs-ms*1.7);
+  if(Date.now()-vm.startedAt>3500&&vm.voiceMs>(vm.machineHint?500:1500)&&vm.toneMs>380){
+    vmStatus("Likely voicemail beep detected — leaving the prepared message.");
+    voicemailLeaveNow("auto")
+  }
+}
+
+function handleStatus(m){if(!m||typeof m!=="object")return;const type=m.type||m.event||"",status=m.status||(type==="call_ended"?"ended":"");if(type==="prompt_sync_ack"){log("Full prompt and AI model synced to the relay.");return}if(type==="ai_model"){log("AI brain active: "+String(m.label||m.id||"selected model"));return}if(type==="auto_hello"){log("Automatic greeting #"+String(m.attempt||"?")+" sent.");return}if(type==="voicemail_detected"){if(st.voicemailEnabled){stopHelloGreeting();vm.machineHint=true;vm.voiceMs=Math.max(vm.voiceMs,2000);vmStatus("Voicemail greeting detected — waiting for the beep.");log("Voicemail greeting detected from the live transcript.");}return}if(type!=="call_status"&&type!=="call_ended"&&status!=="ended")return;if(status==="active"){setStatus("Connected");log("Recipient connected.");$("audioState").textContent="Call connected — tap Listen live";onRecipientConnected();beginVoicemailWatch();return}if(status==="ending"&&m.reason==="recipient_request"){stopVoicemailWatch();setStatus("Ending");log("Recipient asked to end the call.");return}if(status==="ended"){if(st.localEnd)markEnded("Ended","You ended the call.");else if(m.reason==="recipient_request")markEnded("Ended","Call ended after the recipient asked to stop.");else markEnded("Hung up","The recipient hung up or the phone connection ended.");}}
+
+let monitorRetryTimer=null,monitorRetryDelay=1200;
+function stopMonitorRecovery(){
+  if(monitorRetryTimer){clearTimeout(monitorRetryTimer);monitorRetryTimer=null}
+  monitorRetryDelay=1200
+}
+function scheduleMonitorReconnect(){
+  if(st.ended||!st.callId||!st.monitorUrl||monitorRetryTimer)return;
+  const delay=document.hidden?5000:monitorRetryDelay;
+  monitorRetryTimer=setTimeout(()=>{
+    monitorRetryTimer=null;
+    reconnectMonitor();
+  },delay);
+  monitorRetryDelay=Math.min(8000,Math.round(monitorRetryDelay*1.6))
+}
+function reconnectMonitor(){
+  if(st.ended||!st.callId||!st.monitorUrl)return;
+  if(st.monitor&&(st.monitor.readyState===WebSocket.OPEN||st.monitor.readyState===WebSocket.CONNECTING))return;
+  $("audioState").textContent=document.hidden?"Call continues in background · monitor reconnect pending":"Reconnecting live monitor…";
+  connectMonitor(st.monitorUrl)
+}
+function connectMonitor(url){
+  if(url)st.monitorUrl=url;
+  stopMonitorRecovery();
+  const previous=st.monitor;
+  if(previous){
+    previous.onclose=null;previous.onerror=null;
+    try{previous.close()}catch{}
+  }
+  const w=new WebSocket(st.monitorUrl||url);
+  w.binaryType="arraybuffer";
+  st.monitor=w;
+  w.onopen=()=>{
+    if(st.monitor!==w)return;
+    monitorRetryDelay=1200;
+    $("listen").disabled=false;
+    $("audioState").textContent=document.hidden?"Call active in background · monitor connected":"Status monitor connected";
+    try{
+      w.send(JSON.stringify({
+        type:"prompt_sync",
+        scenario:typeof st.promptText==="string"?st.promptText:String(st.detail||""),
+        extra:String(st.extraDetail||""),
+        recipient:String(st.name||"Unknown"),
+        ai_model:String(st.aiModel||"openai:gpt-5.6-luna")
+      }))
+    }catch(e){log("Could not sync the full Deepgram prompt: "+e.message)}
+  };
+  w.onmessage=e=>{
+    if(st.monitor!==w)return;
+    if(typeof e.data==="string"){
+      try{handleStatus(JSON.parse(e.data))}catch{}
+      return
+    }
+    const mediaBytes=new Uint8Array(e.data);
+    detectGreetingResponse(mediaBytes);
+    scanVoicemailMedia(mediaBytes);
+    if(!st.listenOn||!st.ctx)return;
+    const a=mu(mediaBytes),b=st.ctx.createBuffer(1,a.length,8000);
+    b.copyToChannel(a,0);
+    const s=st.ctx.createBufferSource();
+    s.buffer=b;s.connect(st.ctx.destination);
+    const t=Math.max(st.ctx.currentTime+.02,st.next);
+    s.start(t);st.next=t+b.duration
+  };
+  w.onclose=()=>{
+    if(st.monitor!==w)return;
+    st.monitor=null;
+    if(st.ended||!st.callId)return;
+    $("listen").disabled=true;
+    $("audioState").textContent=document.hidden
+      ?"Call continues in background · live monitor paused"
+      :"Live monitor disconnected · reconnecting…";
+    scheduleMonitorReconnect()
+  };
+  w.onerror=()=>{
+    if(st.monitor!==w||st.ended)return;
+    $("audioState").textContent=document.hidden
+      ?"Call continues in background · monitor connection paused"
+      :"Live monitor connection error · reconnecting…"
+  }
+}
+document.addEventListener("visibilitychange",()=>{
+  if(st.ended||!st.callId)return;
+  if(document.hidden){
+    persistActiveCall();
+    if(st.ctx&&st.listenOn&&st.ctx.state==="suspended")st.ctx.resume().catch(()=>{});
+    $("audioState").textContent=st.listenOn?"Live listen remains on · browser may limit background audio":"Call continues in background · live monitor may pause"
+  }else{
+    if(st.ctx&&st.listenOn&&st.ctx.state==="suspended")st.ctx.resume().catch(()=>{});
+    reconnectMonitor()
+  }
+});
+window.addEventListener("pagehide",()=>{if(st.callId&&!st.ended)persistActiveCall()});
+window.addEventListener("beforeunload",()=>{if(st.callId&&!st.ended)persistActiveCall()});
+window.addEventListener("pageshow",()=>{if(st.callId&&!st.ended)reconnectMonitor()});
+window.addEventListener("focus",()=>{
+  if(st.ctx&&st.listenOn&&st.ctx.state==="suspended")st.ctx.resume().catch(()=>{});
+  reconnectMonitor()
+});
+window.addEventListener("online",reconnectMonitor);
+
+function mu(u){let out=new Float32Array(u.length);for(let i=0;i<u.length;i++){let x=(~u[i])&255,s=(x&128)?-1:1,e=(x>>4)&7,m=x&15,v=((m<<3)+132)<<e;out[i]=Math.max(-1,Math.min(1,s*(v-132)/32768))}return out}
+$("listen").onclick=async()=>{if(!st.ctx)st.ctx=new(window.AudioContext||window.webkitAudioContext)({sampleRate:8000});await st.ctx.resume();st.listenOn=!st.listenOn;st.next=st.ctx.currentTime;$("listen").textContent=st.listenOn?"Mute live audio":"Listen live";$("audioState").textContent=st.listenOn?"Listening live":"Live audio muted"};
+$("guideSend").onclick=async()=>{let m=$("guide").value.trim();if(!m||!st.callId)return;let r=await fetch("/api/guide",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({call_id:st.relayId||st.callId,message:m,access_code:scheduleAccessCode()})});let d=await r.json();if(r.ok){$("guide").value="";log((d.mode==="relevant"?"When relevant":"Next")+" director note saved.")}else log(d.error||"Guidance failed.")};
+$("end").onclick=async()=>{if(!st.callId)return;st.localEnd=true;$("end").disabled=true;let r=await fetch(st.provider==="vonage"?"/api/audio-config":"/api/end-call",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(st.provider==="vonage"?{action:"vonage-end",call_id:st.callId,access_code:st.code}:{provider:st.provider,call_id:st.callId,access_code:scheduleAccessCode()})});let d=await r.json();if(r.ok)markEnded("Ended","You ended the call.");else{st.localEnd=false;log(d.error||"Could not end call.");$("end").disabled=false}};
+function fmtSchedule(x){try{return new Date(x).toLocaleString()}catch{return x}}function scheduleAccessCode(){return (st.code||"").trim()}
+function cleanScheduleText(s){return String(s||"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]))}
+async function establishScheduleSession(){if(!st.code)return;try{await fetch("/api/numbers",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"schedule-auth",access_code:st.code})})}catch{}}
+async function refreshSchedules(){
+  const box=$("scheduleList");if(!box)return;
+  $("scheduleAuthBox").classList.add("hidden");
+  box.innerHTML='<small class="muted">Loading scheduled calls…</small>';
+  try{
+    const r=await fetch("/api/numbers",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"schedule-list",access_code:scheduleAccessCode()})});
+    const d=await r.json();if(!r.ok){const e=new Error(d.error||"Could not load scheduled calls.");e.status=r.status;throw e}
+    const all=(d.schedules||[]);
+    const jobs=all.filter(x=>["scheduled","running"].includes(x.status)).concat(all.filter(x=>!["scheduled","running"].includes(x.status)).reverse()).slice(0,30);
+    box.innerHTML=jobs.length?jobs.map(x=>{
+      const upcoming=x.status==="scheduled";
+      const stateText=({scheduled:"Scheduled",running:"Starting",completed:"Call placed",cancelled:"Cancelled",failed:"Failed",missed:"Missed"}[x.status]||x.status);
+      const when=cleanScheduleText(fmtSchedule(x.scheduled_for));
+      const who=cleanScheduleText(x.recipient_name||"Call");
+      const provider=cleanScheduleText(x.provider||"");
+      const number=cleanScheduleText(x.to_number||"");
+      return '<div class="scheduleItem"><div style="min-width:0"><b>'+when+'</b><small>'+who+' · '+provider+' · '+number+'</small><small>Status: '+stateText+'</small></div>'+(upcoming?'<button class="btn danger cancelSchedule" data-id="'+cleanScheduleText(x.id)+'" type="button">Cancel</button>':'')+'</div>';
+    }).join(""):'<small class="muted">No scheduled calls found.</small>';
+    box.querySelectorAll(".cancelSchedule").forEach(b=>b.onclick=async()=>{b.disabled=true;try{const rr=await fetch("/api/numbers",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"schedule-cancel",id:b.dataset.id,access_code:scheduleAccessCode()})});const dd=await rr.json();if(!rr.ok)throw new Error(dd.error||"Could not cancel scheduled call.");$("scheduleState").textContent="Scheduled call cancelled.";await refreshSchedules()}catch(e){$("scheduleState").textContent=e.message;b.disabled=false}});
+  }catch(e){if(e.status===401){$("scheduleAuthBox").classList.remove("hidden");box.innerHTML='<small class="muted">Unlock schedules to view or cancel them.</small>'}else box.innerHTML='<small class="muted">Could not load schedules: '+cleanScheduleText(e.message)+'</small>'}
+}
+$("refreshSchedules").onclick=refreshSchedules;
+$("scheduleUnlock").onclick=async()=>{const code=$("scheduleUnlockCode").value.trim();if(!code){$("scheduleUnlockMessage").textContent="Enter the owner access code to unlock schedules.";return}const b=$("scheduleUnlock");b.disabled=true;try{const r=await fetch("/api/numbers",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"schedule-auth",access_code:code})});const d=await r.json();if(!r.ok)throw Error(d.error||"Could not unlock schedules.");$("scheduleUnlockCode").value="";$("scheduleUnlockMessage").textContent="Unlocked for this browser.";await refreshSchedules()}catch(e){$("scheduleUnlockMessage").textContent=e.message}finally{b.disabled=false}};
+$("scheduleCall").onclick=async()=>{
+  const input=$("scheduleAt"),state=$("scheduleState"),v=input.value;
+  if(!v){state.textContent="Choose a date and time first.";return}
+  const when=new Date(v),now=Date.now(),max=now+7*24*60*60*1000;
+  if(!Number.isFinite(when.getTime())||when.getTime()<=now){state.textContent="Choose a future date and time.";return}
+  if(when.getTime()>max){state.textContent="Scheduled calls can be up to 7 days ahead.";return}
+  const b=buildCallBody();b.access_code=scheduleAccessCode();if(!b.access_code){state.textContent="Set up the call first so scheduling can reuse your owner authorization.";return}b.action="schedule-create";b.scheduled_for=when.toISOString();
+  $("scheduleCall").disabled=true;state.textContent="Scheduling…";
+  try{
+    const r=await fetch("/api/numbers",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(b)});
+    const d=await r.json();if(!r.ok)throw new Error(d.error||"Could not schedule call.");
+    state.textContent="Scheduled for "+fmtSchedule(d.schedule.scheduled_for)+". It will run even if this page is closed.";
+    log("Call scheduled for "+fmtSchedule(d.schedule.scheduled_for)+".");
+    input.value="";await refreshSchedules()
+  }catch(e){state.textContent=e.message}
+  finally{$("scheduleCall").disabled=false}
+};
+
+setTimeout(()=>{if(!st.callId)restoreActiveCall()},0);
+</script></body></html>
