@@ -1,0 +1,6 @@
+function authHeader(){return "Basic "+Buffer.from(process.env.SIGNALWIRE_PROJECT_ID+":"+process.env.SIGNALWIRE_API_TOKEN).toString("base64")}
+function space(){return String(process.env.SIGNALWIRE_SPACE||"").replace(/^https?:\/\//,"").replace(/\/$/,"")}
+function okAccess(b){const value=typeof b==="string"?b:((b||{}).access_code||"");return !!process.env.CALL_ACCESS_CODE&&String(value)===process.env.CALL_ACCESS_CODE}
+function normalizePhone(v){const raw=String(v||"").trim(),d=raw.replace(/\D/g,"");if(raw.startsWith("+")&&d.length>=10&&d.length<=15)return "+"+d;if(d.length===10)return "+1"+d;if(d.length===11&&d[0]==="1")return "+"+d;return null}
+async function sw(body){const r=await fetch("https://"+space()+"/api/calling/calls",{method:"POST",headers:{authorization:authHeader(),"content-type":"application/json"},body:JSON.stringify(body)});const txt=await r.text();let data={};try{data=JSON.parse(txt)}catch{data={message:txt}};return{r,data}}
+module.exports={authHeader,space,okAccess,normalizePhone,sw};
