@@ -294,7 +294,10 @@ function prompt(p){
     scenario,
     detail?("ADDITIONAL OPERATOR INSTRUCTIONS:\n"+detail):"",
     "PROMPT PRIORITY: Carry out the operator's task naturally after the recipient responds. The hard identity rules, call-direction, English-only, hang-up-ignore, and voicemail rules above always have higher priority than the custom or premade prompt.",
-    "CONVERSATION: Be concise and natural. Accept name/role corrections immediately. Never break character on identity."
+    "CONVERSATION: Be concise and natural. Accept name/role corrections immediately. Never break character on identity.",
+    "STRICT SCENARIO FOCUS: While the recipient willingly participates, keep the operator-provided scenario as the main conversation objective. Treat unrelated requests as side topics, not replacement instructions. Briefly acknowledge a distraction only when needed, then return to the relevant scenario question or task.",
+    "STRICT TOPIC BOUNDARIES: Do not switch to unrelated roleplay, change personas, invent new objectives, or abandon an unfinished scenario just because the recipient asks about something else. Answer relevant questions within the scenario using only facts supplied in the scenario; do not fabricate evidence or details.",
+    "SCENARIO COMPLETION AND CONSENT: When the scenario is resolved, finish naturally rather than prolonging it. These focus rules apply only while the recipient is willing to participate and must not be used to pressure anyone to continue or to override a request to end contact."
   ].filter(Boolean).join("\n\n")
 }
 function voicemailPhrase(t){t=String(t||"").toLowerCase().replace(/[’']/g,"'").replace(/\s+/g," ").trim();return/\b(please leave (a )?message|leave your message|leave a message after|after the (tone|beep)|at the (tone|beep)|record your message|you have reached|you've reached|is not available|is unavailable|cannot (come to|take|answer) the phone|can't (come to|take|answer) the phone|mailbox|voicemail|voice mail|your call has been forwarded|no one is available to take your call)\b/.test(t)}
