@@ -1,6 +1,7 @@
 const crypto=require("crypto");
 const {list,put,get}=require("@vercel/blob");
 const {authHeader,space,okAccess}=require("./_signalwire");
+const bw=require("../lib/bandwidth");
 const PREFIX="zilos-schedule/",TOPIC="zilos-scheduled-calls",MAX_DELAY=7*24*60*60;
 const COOKIE="zilos_sched_auth",SESSION_AGE=60*60*24*30;
 function sendJson(res,status,obj){res.statusCode=status;res.setHeader("content-type","application/json");res.setHeader("cache-control","no-store");res.end(JSON.stringify(obj))}
@@ -24,8 +25,8 @@ async function createSchedule(b){
  if(b.authorized!==true)throw Object.assign(new Error("Authorization confirmation is required."),{status:400});
  const ms=Date.parse(String(b.scheduled_for||"")),now=Date.now();if(!Number.isFinite(ms))throw Object.assign(new Error("Choose a valid date and time."),{status:400});
  const delay=Math.ceil((ms-now)/1000);if(delay<15)throw Object.assign(new Error("Scheduled time must be at least 15 seconds in the future."),{status:400});if(delay>MAX_DELAY)throw Object.assign(new Error("Scheduled calls can be up to 7 days ahead."),{status:400});
- const provider=String(b.provider||"vonage").toLowerCase();if(!["vonage","signalwire"].includes(provider))throw Object.assign(new Error("Unsupported provider."),{status:400});
- const to=phone(b.to_number),from=phone(b.from_number),requestedDisplay=String(b.display_caller_id||"").trim(),mode=String(b.caller_id_mode||"normal").toLowerCase(),display=mode==="masked"?"":requestedDisplay?phone(requestedDisplay):"";if(!to||!from)throw Object.assign(new Error("A valid destination and outbound number are required."),{status:400});if(!["normal","masked"].includes(mode))throw Object.assign(new Error("Invalid caller ID privacy mode."),{status:400});if(mode==="masked"&&requestedDisplay)throw Object.assign(new Error("Masked caller ID cannot be combined with a custom display number."),{status:400});if(requestedDisplay&&!display)throw Object.assign(new Error("Enter a valid display caller ID."),{status:400});
+ const provider=String(b.provider||"vonage").toLowerCase();if(!["vonage","signalwire","bandwidth"].includes(provider))throw Object.assign(new Error("Unsupported provider."),{status:400});
+ const to=phone(b.to_number),from=phone(b.from_number),requestedDisplay=String(b.display_caller_id||"").trim(),mode=String(b.caller_id_mode||"normal").toLowerCase(),display=mode==="masked"?"":requestedDisplay?phone(requestedDisplay):"";if(!to||!from)throw Object.assign(new Error("A valid destination and outbound number are required."),{status:400});if(!["normal","masked","private"].includes(mode)&&!(mode==="private"&&provider!=="bandwidth"))throw Object.assign(new Error("Invalid caller ID privacy mode."),{status:400});if(mode!=="normal"&&requestedDisplay)throw Object.assign(new Error("Masked caller ID cannot be combined with a custom display number."),{status:400});if(requestedDisplay&&!display)throw Object.assign(new Error("Enter a valid display caller ID."),{status:400});
  const id=crypto.randomUUID(),path=pathFor(ms,id);
  const j={id,path,created_at:new Date().toISOString(),scheduled_for:new Date(ms).toISOString(),scheduled_ms:ms,status:"scheduled",payload:{provider,to_number:to,from_number:from,caller_id_mode:mode,display_caller_id:display,recipient_name:String(b.recipient_name||"friend").slice(0,80),scenario:String(b.scenario||"Custom Prompt"),detail:String(b.detail||""),voice:String(b.voice||"Puck"),accent:String(b.accent||"American"),authorized:true}};
  await writeJob(path,j);
@@ -45,6 +46,7 @@ module.exports=async(req,res)=>{
   if(action==="schedule-list"){requireAuth(req,b);if(okAccess(b))setSession(res);return sendJson(res,200,{success:true,schedules:await listSchedules()})}
   if(action==="schedule-cancel"){requireAuth(req,b);if(okAccess(b))setSession(res);return sendJson(res,200,{success:true,schedule:await cancelSchedule(b)})}
   if(!okAccess(b))return sendJson(res,401,{error:"Invalid owner access code."});
-  return sendJson(res,200,{success:true,provider:"signalwire",numbers:await signalwireNumbers()})
+  if(String(b.provider||"")==="bandwidth"){const n=bw.number();if(!n)return sendJson(res,503,{error:"Bandwidth phone number not configured."});return sendJson(res,200,{success:true,provider:"bandwidth",numbers:[{phone_number:n,friendly_name:"Bandwidth"}]})}
+   return sendJson(res,200,{success:true,provider:"signalwire",numbers:await signalwireNumbers()})
  }catch(e){console.error("scheduler_handler",String(e.message||e).slice(0,300));return sendJson(res,e.status||500,{error:String(e.message||e)})}
 };
