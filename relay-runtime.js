@@ -548,7 +548,7 @@ async function gem(s,p){
 function isStopRequest(text){
  const s=String(text||"").toLowerCase().replace(/[’]/g,"'").replace(/\s+/g," ").trim();
  if(!s||s.length>350)return false;
- return /(?:^|[.!?]\s*)(?:please\s+)?(?:stop (?:calling|contacting|talking|this call)|do not call(?: me)?(?: again)?|don't call(?: me)?(?: again)?|don't contact me|take me off (?:your|the) (?:list|call list)|put me on (?:your|the) do[- ]not[- ]call list|remove my (?:number|name) from (?:your|the) list|hang up(?: now)?|end (?:the|this) call|wrong number|you have the wrong number|i did not consent|i didn't consent|i don't want (?:any more |this )?calls)(?:[.!? ]|$)/i.test(s);
+ return /(?:^|[.!?]\s*)(?:(?:no|sorry)[,! ]+)?(?:please\s+)?(?:stop (?:calling|contacting|talking|this call)|do not call(?: me)?(?: again)?|don't call(?: me)?(?: again)?|don't contact me|take me off (?:your|the) (?:list|call list)|put me on (?:your|the) do[- ]not[- ]call list|remove my (?:number|name) from (?:your|the) list|hang up(?: now)?|end (?:the|this) call|wrong number|you have the wrong number|i did not consent|i didn't consent|i don't want (?:any more |this )?calls)(?:[.!? ]|$)/i.test(s);
 }
 function requestOptOut(s){
  if(s.ending||s.cleaned||s.optOutProcessing)return;
