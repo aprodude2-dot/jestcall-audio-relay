@@ -32,11 +32,11 @@ async function bandwidthAnswer(req,res,u){
  const exp=String(u.searchParams.get("expires")||""),sig=String(u.searchParams.get("sig")||"");
  if(!/^[0-9a-f-]{36}$/i.test(promptId)||!/^\d{13}$/.test(exp)||Date.now()>Number(exp)||Number(exp)>Date.now()+600000||!bw.cmp(sig,bw.answerSignature(promptId,to,from,exp)))return res.status(401).json({error:"Invalid Bandwidth callback."});
  const b=req.body||{},callId=String(b.callId||"");
- if(b.eventType!=="answer"||String(b.accountId)!==bw.account()||String(b.applicationId)!==bw.app()||normalizePhone(b.to)!==to||normalizePhone(b.from)!==from||!/^c-[0-9a-f-]{36}$/i.test(callId))return res.status(403).json({error:"Unexpected Bandwidth callback."});
- const expiry=String(Date.now()+90000),streamSig=bw.streamSignature(callId,promptId,expiry);
- const qs=new URLSearchParams({call_id:callId,prompt_id:promptId,expires:expiry,sig:streamSig});
+ if(b.eventType!=="answer"||b.direction!=="outbound"||String(b.accountId)!==bw.account()||String(b.applicationId)!==bw.app()||normalizePhone(b.to)!==to||normalizePhone(b.from)!==from||!/^c-[0-9a-f-]{36}$/i.test(callId))return res.status(403).json({error:"Unexpected Bandwidth callback."});
+ const expiry=String(Date.now()+90000),streamSig=bw.streamSignature(callId,promptId,expiry,to);
+ const qs=new URLSearchParams({call_id:callId,prompt_id:promptId,expires:expiry,to,sig:streamSig});
  const dest="wss://jestcall-gemini-relay.onrender.com/bandwidth?"+qs;
- const xml='<?xml version="1.0" encoding="UTF-8"?><Response><StartStream name="zilos_deepgram" mode="bidirectional" tracks="inbound" destination="'+bw.xesc(dest)+'"><StreamParam name="prompt_id" value="'+bw.xesc(promptId)+'"/></StartStream><StopStream name="zilos_deepgram" wait="true"/></Response>';
+ const xml='<?xml version="1.0" encoding="UTF-8"?><Response><StartStream name="zilos_deepgram" mode="bidirectional" tracks="inbound" destination="'+bw.xesc(dest)+'"><StreamParam name="prompt_id" value="'+bw.xesc(promptId)+'"/><StreamParam name="to_number" value="'+bw.xesc(to)+'"/></StartStream><StopStream name="zilos_deepgram" wait="true"/></Response>';
  res.status(200).setHeader("content-type","application/xml; charset=utf-8");return res.send(xml);
 }
 module.exports=async function(req,res){
@@ -48,13 +48,14 @@ module.exports=async function(req,res){
  const b=req.body||{};if(!okAccess(b))return res.status(401).json({error:"Incorrect owner access code."});if(b.authorized!==true)return res.status(400).json({error:"Authorization confirmation is required."});
  const provider=String(b.provider||"signalwire").toLowerCase(),to=normalizePhone(b.to_number),from=normalizePhone(b.from_number),requestedDisplay=String(b.display_caller_id||"").trim(),mode=String(b.caller_id_mode||"normal").toLowerCase(),display=mode==="masked"?from:requestedDisplay?normalizePhone(requestedDisplay):from;
  if(!to||!from)return res.status(400).json({error:"Enter valid destination and outbound phone numbers."});
-  if(!["normal","masked","private"].includes(mode)&&!(mode==="private"&&provider!=="bandwidth"))return res.status(400).json({error:"Invalid caller ID privacy mode."});
+  if(!["normal","masked","private"].includes(mode)||(mode==="private"&&provider!=="bandwidth"))return res.status(400).json({error:"Invalid caller ID privacy mode."});
   if(mode!=="normal"&&requestedDisplay)return res.status(400).json({error:"Masked caller ID uses the selected provider number. Remove the custom display caller ID."});
   if(!display)return res.status(400).json({error:"Enter a valid display caller ID."});
  try{
    if(await isBlocked(to))return res.status(403).json({error:"This destination is on the Zilos Tools do-not-call list."});
 
    if(provider==="bandwidth"){
+      if(b.recipient_consent!==true)return res.status(400).json({error:"Confirm the recipient agreed to receive this AI-assisted call."});
      if(from!==bw.number())return res.status(400).json({error:"Choose the configured Bandwidth phone number."});
      if(display!==from)return res.status(400).json({error:"Unverified external caller ID is not supported."});
      if(!bw.configured())return res.status(503).json({error:"Bandwidth is not ready. Save a newly rotated BANDWIDTH_CLIENT_SECRET in Vercel and enable bidirectional streaming."});
