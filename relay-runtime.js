@@ -215,7 +215,9 @@ function feedVAD(s,m){
     return
   }
   const x=to16(m),st=pcmStats(x);
-  const rb=st.rms>900&&ringbackScore(x)>.32;
+  // Once real recipient speech is confirmed, do not classify later speech as ringback.
+  const rb=!s.heardUser&&st.rms>900&&ringbackScore(x)>.32;
+  if(s.heardUser&&s.ringbackActive)s.ringbackActive=false;
   if(rb){
     s.ringbackSeen=true;s.lastRingbackAt=Date.now();
     if(!s.ringbackActive){s.ringbackActive=true;console.log("ringback_suppressed",s.cid,Math.round(st.rms),st.zcr.toFixed(3))}
@@ -245,10 +247,10 @@ function injectGuide(s,item){
       if(!Array.isArray(s.relevantGuides))s.relevantGuides=[];
       s.relevantGuides.push(note);
       if(s.relevantGuides.length>6)s.relevantGuides.shift();
-      s.g.send(JSON.stringify({type:"UpdatePrompt",prompt:composePrompt(s)}));
+      s.g.send(JSON.stringify({type:"UpdateThink",think:thinkSettings(s.aiModel,composePrompt(s))}));
     }else{
       s.restoreBasePrompt=true;
-      s.g.send(JSON.stringify({type:"UpdatePrompt",prompt:composePrompt(s,note)}));
+      s.g.send(JSON.stringify({type:"UpdateThink",think:thinkSettings(s.aiModel,composePrompt(s,note))}));
     }
     return true
   }catch{return false}
@@ -531,7 +533,7 @@ async function gem(s,p){
     if(type==="AgentAudioDone"){
       console.log("deepgram_turn_complete",s.cid,"queued_frames",s.outQ.length);
       s.aiSpeaking=false;
-      if(s.restoreBasePrompt&&s.g&&s.g.readyState===WebSocket.OPEN){try{s.g.send(JSON.stringify({type:"UpdatePrompt",prompt:composePrompt(s)}))}catch{}s.restoreBasePrompt=false}
+      if(s.restoreBasePrompt&&s.g&&s.g.readyState===WebSocket.OPEN){try{s.g.send(JSON.stringify({type:"UpdateThink",think:thinkSettings(s.aiModel,composePrompt(s))}))}catch{}s.restoreBasePrompt=false}
       const wasSilenceHello=s.silenceHelloAwaitingDone;
       if(s.helloAwaitingDone)s.helloAwaitingDone=false;
       if(s.silenceHelloAwaitingDone)s.silenceHelloAwaitingDone=false;
