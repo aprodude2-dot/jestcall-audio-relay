@@ -30,8 +30,10 @@ module.exports=async function(req,res){
   if(String(req.query?.__prompt_store||qs.get("__prompt_store")||"")==="1")return require("../lib/prompt-store-handler")(req,res);
  res.setHeader("Cache-Control","no-store");if(req.method!=="POST")return res.status(405).json({error:"POST required."});
  const b=req.body||{};if(!okAccess(b))return res.status(401).json({error:"Incorrect owner access code."});if(b.authorized!==true)return res.status(400).json({error:"Authorization confirmation is required."});
- const provider=String(b.provider||"signalwire").toLowerCase(),to=normalizePhone(b.to_number),from=normalizePhone(b.from_number),requestedDisplay=String(b.display_caller_id||"").trim(),display=requestedDisplay?normalizePhone(requestedDisplay):from;
+ const provider=String(b.provider||"signalwire").toLowerCase(),to=normalizePhone(b.to_number),from=normalizePhone(b.from_number),requestedDisplay=String(b.display_caller_id||"").trim(),mode=String(b.caller_id_mode||"normal").toLowerCase(),display=mode==="masked"?from:requestedDisplay?normalizePhone(requestedDisplay):from;
  if(!to||!from)return res.status(400).json({error:"Enter valid destination and outbound phone numbers."});
+  if(!["normal","masked"].includes(mode))return res.status(400).json({error:"Invalid caller ID privacy mode."});
+  if(mode==="masked"&&requestedDisplay)return res.status(400).json({error:"Masked caller ID uses the selected provider number. Remove the custom display caller ID."});
   if(!display)return res.status(400).json({error:"Enter a valid display caller ID."});
  try{
    if(await isBlocked(to))return res.status(403).json({error:"This destination is on the Zilos Tools do-not-call list."});

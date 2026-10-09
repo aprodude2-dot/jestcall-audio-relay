@@ -117,9 +117,11 @@ async function handlePost(req,res,url){
     if(!okAccess(b))return send(res,401,{error:"Incorrect owner access code."});
     if(b.authorized!==true)return send(res,400,{error:"You must confirm authorization before placing the call."});
     const to=normalizePhone(b.to_number),from=normalizePhone(b.from_number),owned=normalizePhone(process.env.VONAGE_PHONE_NUMBER);
-    const requestedDisplay=String(b.display_caller_id||"").trim(),display=requestedDisplay?normalizePhone(requestedDisplay):from;
+    const requestedDisplay=String(b.display_caller_id||"").trim(),mode=String(b.caller_id_mode||"normal").toLowerCase(),display=mode==="masked"?from:requestedDisplay?normalizePhone(requestedDisplay):from;
     if(!to)return send(res,400,{error:"Enter a valid destination number."});
     if(!from||!owned||from!==owned)return send(res,400,{error:"Choose the configured Vonage number."});
+    if(!["normal","masked"].includes(mode))return send(res,400,{error:"Invalid caller ID privacy mode."});
+    if(mode==="masked"&&requestedDisplay)return send(res,400,{error:"Masked caller ID uses the selected provider number. Remove the custom display caller ID."});
     if(!display)return send(res,400,{error:"Enter a valid display caller ID."});
     if(display!==from){
       const allowed=String(process.env.VONAGE_VERIFIED_CALLER_IDS||"").split(/[,;\s]+/).map(normalizePhone).filter(Boolean);
