@@ -65,7 +65,7 @@ module.exports=async function(req,res){
      const expires=String(Date.now()+300000),sig=bw.answerSignature(prompt_id,to,from,expires);
      const answerUrl="https://zilostools.vercel.app/api/call?"+new URLSearchParams({__bandwidth_answer:"1",prompt_id,to,from,expires,sig});
      const request={to,from,applicationId:bw.app(),answerUrl,answerMethod:"POST",callTimeout:45,privacy:mode==="private"};
-     if(mode==="private")request.callerDisplayName="Private";
+     if(mode==="private")request.displayName="Private";
      const d=await bw.api("/calls","POST",request);
      const id=String(d.callId||"");if(!/^c-[0-9a-f-]{36}$/i.test(id))return res.status(502).json({error:"Bandwidth returned no valid call ID."});
      console.log("bandwidth_dial_queued",id,"private",mode==="private");
