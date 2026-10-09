@@ -1,6 +1,7 @@
 const crypto=require("crypto");
 const {list}=require("@vercel/blob");
 const {sw}=require("./_signalwire");
+const bandwidth=require("../lib/bandwidth");
 const BRIDGE_KEY=String(process.env.BRIDGE_KEY||"");
 function b64url(v){const b=Buffer.isBuffer(v)?v:Buffer.from(typeof v==="string"?v:JSON.stringify(v));return b.toString("base64").replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"")}
 function privateKey(){let k=String(process.env.VONAGE_PRIVATE_KEY||"");if(k.includes("\\n")&&!k.includes("\n"))k=k.replace(/\\n/g,"\n");return k}
@@ -20,6 +21,10 @@ module.exports=async function(req,res){
  const id=String((req.body||{}).call_id||"");
  if(!id)return res.status(400).json({error:"Missing call ID."});
  try{
+   if(/^c-[0-9a-f-]{36}$/i.test(id)){
+    await bandwidth.api("/calls/"+encodeURIComponent(id),"POST",{state:"completed"});
+    return res.status(200).json({success:true});
+   }
    if(id.startsWith("vonage:")){
      const session=id.slice(7);
      if(!/^[0-9a-f-]{36}$/i.test(session))return res.status(400).json({error:"Invalid Vonage relay ID."});
