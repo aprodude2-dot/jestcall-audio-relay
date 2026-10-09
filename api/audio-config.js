@@ -117,8 +117,14 @@ async function handlePost(req,res,url){
     if(!okAccess(b))return send(res,401,{error:"Incorrect owner access code."});
     if(b.authorized!==true)return send(res,400,{error:"You must confirm authorization before placing the call."});
     const to=normalizePhone(b.to_number),from=normalizePhone(b.from_number),owned=normalizePhone(process.env.VONAGE_PHONE_NUMBER);
+    const requestedDisplay=String(b.display_caller_id||"").trim(),display=requestedDisplay?normalizePhone(requestedDisplay):from;
     if(!to)return send(res,400,{error:"Enter a valid destination number."});
     if(!from||!owned||from!==owned)return send(res,400,{error:"Choose the configured Vonage number."});
+    if(!display)return send(res,400,{error:"Enter a valid display caller ID."});
+    if(display!==from){
+      const allowed=String(process.env.VONAGE_VERIFIED_CALLER_IDS||"").split(/[,;\s]+/).map(normalizePhone).filter(Boolean);
+      if(!allowed.includes(display))return send(res,400,{error:"This caller ID must first be registered with Vonage Support as a Verified Caller ID and then added to VONAGE_VERIFIED_CALLER_IDS."});
+    }
     try{if(await isBlocked(to))return send(res,403,{error:"This destination is on the Zilos Tools do-not-call list."})}
     catch{return send(res,500,{error:"Could not check the do-not-call list."})}
     if(!BRIDGE_KEY)return send(res,503,{error:"Bridge key is not configured."});
@@ -150,7 +156,7 @@ async function handlePost(req,res,url){
       headers:{authorization:"Bearer "+jwt,"content-type":"application/json"},
       body:JSON.stringify({
         to:[{type:"phone",number:to.replace(/^\+/,"")}],
-        from:{type:"phone",number:from.replace(/^\+/,"")},
+        from:{type:"phone",number:display.replace(/^\+/,"")},
         event_url:[evUrl],event_method:"POST",ncco
       })
     });

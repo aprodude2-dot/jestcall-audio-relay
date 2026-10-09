@@ -11,6 +11,13 @@ async function signalwireOwned(){
  if(!r.ok)throw Object.assign(new Error("SignalWire number lookup failed ("+r.status+")."),{status:r.status});
  return (Array.isArray(d.incoming_phone_numbers)?d.incoming_phone_numbers:[]).map(n=>normalizePhone(n&&n.phone_number)).filter(Boolean);
 }
+async function signalwireVerifiedCallerId(phone){
+  const url="https://"+space()+"/api/relay/rest/verified_caller_ids?filter_number="+encodeURIComponent(phone);
+  const {r,d}=await jsonFetch(url,{headers:{authorization:authHeader()}});
+  if(!r.ok)throw Object.assign(new Error("Could not check verified SignalWire caller IDs ("+r.status+")."),{status:502});
+  return Array.isArray(d.data)&&d.data.some(n=>normalizePhone(n&&n.number)===phone&&
+    (n.verified===true||String(n.status||"").toLowerCase()==="verified"));
+}
 async function telnyxOwned(){
  const key=process.env.TELNYX_API_KEY;if(!key)throw Object.assign(new Error("TELNYX_API_KEY is not configured."),{status:503});
  const {r,d}=await jsonFetch("https://api.telnyx.com/v2/phone_numbers?page[size]=100",{headers:{authorization:"Bearer "+key}});
@@ -23,11 +30,13 @@ module.exports=async function(req,res){
   if(String(req.query?.__prompt_store||qs.get("__prompt_store")||"")==="1")return require("../lib/prompt-store-handler")(req,res);
  res.setHeader("Cache-Control","no-store");if(req.method!=="POST")return res.status(405).json({error:"POST required."});
  const b=req.body||{};if(!okAccess(b))return res.status(401).json({error:"Incorrect owner access code."});if(b.authorized!==true)return res.status(400).json({error:"Authorization confirmation is required."});
- const provider=String(b.provider||"signalwire").toLowerCase(),to=normalizePhone(b.to_number),from=normalizePhone(b.from_number);
+ const provider=String(b.provider||"signalwire").toLowerCase(),to=normalizePhone(b.to_number),from=normalizePhone(b.from_number),requestedDisplay=String(b.display_caller_id||"").trim(),display=requestedDisplay?normalizePhone(requestedDisplay):from;
  if(!to||!from)return res.status(400).json({error:"Enter valid destination and outbound phone numbers."});
+  if(!display)return res.status(400).json({error:"Enter a valid display caller ID."});
  try{
    if(await isBlocked(to))return res.status(403).json({error:"This destination is on the Zilos Tools do-not-call list."});
    if(provider==="telnyx"){
+      if(display!==from)return res.status(400).json({error:"Custom Telnyx caller IDs are not configured."});
      const rows=await telnyxOwned(),row=rows.find(n=>normalizePhone(n&&n.phone_number)===from);
      if(!row)return res.status(400).json({error:"That Telnyx outbound number was not found in this account."});
      const connectionId=String(row.connection_id||"");if(!connectionId)return res.status(409).json({error:"That Telnyx number is not assigned to a Voice API connection. Assign it to a Call Control app in Telnyx first."});
@@ -38,6 +47,7 @@ module.exports=async function(req,res){
    }
    if(!BRIDGE_KEY)return res.status(503).json({error:"Relay bridge key is not configured."});
    const owned=await signalwireOwned();if(!owned.includes(from))return res.status(400).json({error:"That SignalWire outbound number was not found in this account."});
+    if(display!==from&&!owned.includes(display)&&!(await signalwireVerifiedCallerId(display)))return res.status(400).json({error:"Display caller ID must be a project number or a SignalWire verified caller ID. Verify that number in SignalWire before using it."});
    const name=String(b.recipient_name||"friend").slice(0,80);
    const scenarioFull=String(b.scenario||"Friendly mix-up").slice(0,12000);
    const detailFull=String(b.detail||"").slice(0,6500);
@@ -51,8 +61,8 @@ module.exports=async function(req,res){
    const detail="";
    const sig=sigFor([to,name,scenario,detail,voice,accent,ai_model,prompt_id]),host=String(req.headers["x-forwarded-host"]||req.headers.host||"zilostools.vercel.app").split(",")[0].trim();
    const qs=new URLSearchParams({to,name,scenario,detail,voice,accent,ai_model,prompt_id,sig}),url="https://"+host+"/api/swml?"+qs.toString();
-   console.log("signalwire_dial_start",from);
-   const {r,data}=await sw({command:"dial",params:{from,to,url}});
+   console.log("signalwire_dial_start",from,"display",display);
+   const {r,data}=await sw({command:"dial",params:{from:display,to,url}});
    console.log("signalwire_dial_result",r.status,JSON.stringify(data).slice(0,2000));
    if(!r.ok)return res.status(r.status).json({error:swErr(data,r.status)});
    return res.status(200).json({success:true,provider:"signalwire",call_id:String(data.id||""),status:data.status||"Queued"});
