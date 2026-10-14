@@ -17,9 +17,26 @@ module.exports=async function(req,res){
  res.setHeader("Cache-Control","no-store");
  if(req.method!=="POST")return res.status(405).json({error:"POST required."});
  if(!BRIDGE_KEY||String(req.headers["x-bridge-key"]||"")!==BRIDGE_KEY)return res.status(401).json({error:"Unauthorized."});
- const id=String((req.body||{}).call_id||"");
+ const b=req.body||{},id=String(b.call_id||"");
  if(!id)return res.status(400).json({error:"Missing call ID."});
  try{
+   if(b.action==="send_dtmf"){
+     const digits=String(b.digits||"");
+     if(!/^[0-9*#]{1,12}$/.test(digits))return res.status(400).json({error:"Invalid DTMF digits."});
+     if(!id.startsWith("vonage:"))return res.status(400).json({error:"Provider DTMF is available for Vonage calls only."});
+     const session=id.slice(7);
+     if(!/^[0-9a-f-]{36}$/i.test(session))return res.status(400).json({error:"Invalid Vonage relay ID."});
+     const o=await list({prefix:"vonage-calls/"+session+"/",limit:1});
+     const p=Array.isArray(o.blobs)&&o.blobs[0]&&String(o.blobs[0].pathname||"");
+     const uuid=p?p.split("/").pop().replace(/\.json$/,""):"";
+     if(!/^[0-9a-f-]{36}$/i.test(uuid))return res.status(404).json({error:"Active Vonage call mapping not found."});
+     const r=await fetch("https://api.nexmo.com/v1/calls/"+encodeURIComponent(uuid)+"/dtmf",{
+       method:"PUT",headers:{authorization:"Bearer "+vonageJwt(),"content-type":"application/json"},
+       body:JSON.stringify({digits})
+     });
+     if(!r.ok)return res.status(r.status).json({error:"Vonage rejected keypad input."});
+     return res.status(200).json({success:true});
+   }
    if(id.startsWith("vonage:")){
      const session=id.slice(7);
      if(!/^[0-9a-f-]{36}$/i.test(session))return res.status(400).json({error:"Invalid Vonage relay ID."});
