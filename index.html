@@ -478,7 +478,8 @@ function connectMonitor(url){
     detectGreetingResponse(mediaBytes);
     scanVoicemailMedia(mediaBytes);
     if(!st.listenOn||!st.ctx)return;
-    if(st.ctx.state!=="running"){$("audioState").textContent="Tap Listen live to enable sound";$("listen").textContent="Listen live";st.listenOn=false;return}
+    // Let the browser recover an interrupted AudioContext instead of permanently muting listening.
+    if(st.ctx.state!=="running")st.ctx.resume().catch(()=>{});
     if(st.next>st.ctx.currentTime+.6)st.next=st.ctx.currentTime+.02;
     const a=mu(mediaBytes),b=st.ctx.createBuffer(1,a.length,8000);
     b.copyToChannel(a,0);
