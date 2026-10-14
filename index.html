@@ -278,7 +278,7 @@ document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>close(b.datas
 $("checkBlockedBtn").onclick=async()=>{const phone=$("managePhone").value.trim(),code=$("manageCode").value;manageMessage("Checking…","info");try{const r=await fetch("/api/check-blocked",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({phone,access_code:code})});const d=await r.json();if(!r.ok)throw new Error(d.error||"Could not check number.");manageMessage(d.blocked?"This number is BLOCKED.":"This number is NOT blocked.",d.blocked?"notice":"success")}catch(e){manageMessage(e.message,"notice")}};
 $("addBlockedBtn").onclick=async()=>{const phone=$("managePhone").value.trim();manageMessage("Adding number…","info");try{const r=await fetch("/api/block-number",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({phone})});const d=await r.json();if(!r.ok)throw new Error(d.error||"Could not block number.");manageMessage(d.message||"Number blocked.","success")}catch(e){manageMessage(e.message,"notice")}};
 $("removeBlockedBtn").onclick=async()=>{const phone=$("managePhone").value.trim(),code=$("manageCode").value;manageMessage("Removing number…","info");try{const r=await fetch("/api/unblock-number",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({phone,access_code:code})});const d=await r.json();if(!r.ok)throw new Error(d.error||"Could not remove number.");manageMessage(d.message||"Number removed from the block list.","success")}catch(e){manageMessage(e.message,"notice")}};
-$("form").onsubmit=async e=>{e.preventDefault();st.code=$("code").value;if(!$("fromNumber").value){const ok=await loadFromNumbers();if(!ok||!$("fromNumber").value)return}st.provider=$("provider").value||"signalwire";st.name=normalizeRecipientName($("name").value);st.phone=$("phone").value.trim();st.fromNumber=$("fromNumber").value;st.displayCallerId=$("displayCallerId").value.trim();st.callerIdPrivacy=$("callerIdPrivacy").value==="masked"?"masked":"normal";st.voice=$("voice").value;st.accent=$("accent").value;st.aiModel=$("aiModel").value||"openai:gpt-5.6-luna";st.answerGreeting=$("answerGreeting").checked;st.voicemailEnabled=$("voicemailEnabled").checked;st.voicemailText=$("voicemailMessage").value.trim();st.scenario=S[sel][3]?"Custom Prompt":S[sel][1];st.promptText=S[sel][3]?$("customText").value:PREMADE_SCRIPTS[sel];st.extraDetail=S[sel][3]?"":$("detail").value;st.detail=st.promptText;st.ended=false;st.localEnd=false;st.relayId=null;$("consoleTitle").textContent=(S[sel][3]?"Custom Prompt":S[sel][1])+" — "+st.name;$("activity").innerHTML="";log("Ready. Provider: "+providerName(st.provider)+" · AI: "+$("aiModel").selectedOptions[0].text+" · From: "+st.fromNumber+" · Voice: "+st.voice);if(st.callerIdPrivacy==="masked")log("Caller ID display: showing the selected provider number (not anonymous).");else if(st.displayCallerId)log("Requested display caller ID: "+st.displayCallerId);log("Deepgram script ready: "+(S[sel][3]?"custom prompt (exact text)":"full premade "+st.scenario+" script")+".");$("guideSend").disabled=false;close("setup");open("console");await establishScheduleSession();refreshSchedules()};
+$("form").onsubmit=async e=>{e.preventDefault();st.code=$("code").value;if(!$("fromNumber").value){const ok=await loadFromNumbers();if(!ok||!$("fromNumber").value)return}st.provider=$("provider").value||"signalwire";st.name=normalizeRecipientName($("name").value);st.phone=$("phone").value.trim();st.fromNumber=$("fromNumber").value;st.displayCallerId=$("displayCallerId").value.trim();st.callerIdPrivacy=$("callerIdPrivacy").value==="masked"?"masked":"normal";st.voice=$("voice").value;st.accent=$("accent").value;st.aiModel=$("aiModel").value||"openai:gpt-5.6-luna";st.answerGreeting=$("answerGreeting").checked;st.voicemailEnabled=$("voicemailEnabled").checked;st.voicemailText=$("voicemailMessage").value.trim();st.scenario=S[sel][3]?"Custom Prompt":S[sel][1];st.promptText=S[sel][3]?$("customText").value:PREMADE_SCRIPTS[sel];st.extraDetail=S[sel][3]?"":$("detail").value;st.detail=st.promptText;st.ended=false;st.localEnd=false;st.relayId=null;$("consoleTitle").textContent=(S[sel][3]?"Custom Prompt":S[sel][1])+" — "+st.name;$("activity").innerHTML="";log("Ready. Provider: "+providerName(st.provider)+" · AI: "+$("aiModel").selectedOptions[0].text+" · From: "+st.fromNumber+" · Voice: "+st.voice);if(st.callerIdPrivacy==="masked")log("Caller ID display: showing the selected provider number (not anonymous).");else if(st.displayCallerId)log("Requested display caller ID: "+st.displayCallerId);log("Deepgram script ready: "+(S[sel][3]?"custom prompt (exact text)":"full premade "+st.scenario+" script")+".");$("guide").disabled=false;$("guideNext").disabled=false;$("guideRelevant").disabled=false;$("guideSend").disabled=false;close("setup");open("console");await establishScheduleSession();refreshSchedules()};
 function normalizeRecipientName(raw){
   const name=String(raw||"").trim();
   if(!name||/^(?:none|unknown|unkown|unknwon|not known|no name|no idea|n\/a|na|not sure|unsure|\?)\.?$/i.test(name))return "Unknown";
@@ -525,7 +525,42 @@ window.addEventListener("online",reconnectMonitor);
 
 function mu(u){let out=new Float32Array(u.length);for(let i=0;i<u.length;i++){let x=(~u[i])&255,s=(x&128)?-1:1,e=(x>>4)&7,m=x&15,v=((m<<3)+132)<<e;out[i]=Math.max(-1,Math.min(1,s*(v-132)/32768))}return out}
 $("listen").onclick=async()=>{if(!st.ctx)st.ctx=new(window.AudioContext||window.webkitAudioContext)({sampleRate:8000});await st.ctx.resume();st.listenOn=!st.listenOn;st.next=st.ctx.currentTime;$("listen").textContent=st.listenOn?"Mute live audio":"Listen live";$("audioState").textContent=st.listenOn?"Listening live":"Live audio muted"};
-$("guideSend").onclick=async()=>{let m=$("guide").value.trim();if(!m||!st.callId)return;$("guideSend").disabled=true;try{const r=await fetch("/api/guide",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({call_id:st.relayId||st.callId,message:m,access_code:scheduleAccessCode()})});const d=await r.json();if(!r.ok)throw Error(d.error||"Direction could not be sent.");$("guide").value="";log((d.mode==="relevant"?"When relevant":"Next")+" direction "+(d.queued?"queued until the AI finishes speaking.":"sent to the AI."))}catch(e){log("Direction failed: "+e.message)}finally{$("guideSend").disabled=st.ended}};
+async function postDirection(callId,message){
+  const r=await fetch("/api/guide",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({call_id:callId,message,access_code:scheduleAccessCode()})});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok){const error=new Error(d.error||"Direction request failed (HTTP "+r.status+").");error.status=r.status;throw error}
+  return d
+}
+async function sendDirection(){
+  const field=$("guide"),button=$("guideSend"),message=field.value.trim();
+  if(!message){log("Type a direction before pressing Send.");field.focus();return}
+  if(!st.callId||st.ended){log("Start the AI call before sending directions.");return}
+  const currentCall=st.callId,ids=[...new Set([st.relayId||st.callId,st.callId].filter(Boolean))];
+  button.disabled=true;button.textContent="Sending…";
+  try{
+    let result=null,lastError=null;
+    for(let attempt=0;attempt<4&&!result;attempt++){
+      if(st.ended||st.callId!==currentCall)throw new Error("The call is no longer active.");
+      for(const id of ids){
+        try{result=await postDirection(id,message);break}
+        catch(error){
+          lastError=error;
+          // Older relay builds may identify the same call by the provider ID.
+          // Only try the alternate ID when the relay reports an unknown session.
+          if(error.status!==404||!/active session not found|no active session|session not found|not found/i.test(error.message))throw error;
+        }
+      }
+      if(!result&&attempt<3)await new Promise(resolve=>setTimeout(resolve,700));
+    }
+    if(!result)throw lastError||new Error("The call relay is not ready.");
+    field.value="";
+    log((result.mode==="relevant"?"When relevant":"Next")+" direction "+(result.queued?"queued until the AI finishes speaking.":"sent to the AI."))
+  }catch(error){log("Direction not sent: "+error.message)}
+  finally{button.textContent="Send";button.disabled=st.ended}
+}
+$("guideSend").onclick=sendDirection;
+$("guide").addEventListener("keydown",event=>{if(event.key==="Enter"){event.preventDefault();if(!$("guideSend").disabled)sendDirection()}});
+
 $("end").onclick=async()=>{if(!st.callId)return;st.localEnd=true;$("end").disabled=true;let r=await fetch(st.provider==="vonage"?"/api/audio-config":"/api/end-call",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(st.provider==="vonage"?{action:"vonage-end",call_id:st.callId,access_code:st.code}:{provider:st.provider,call_id:st.callId,access_code:scheduleAccessCode()})});let d=await r.json();if(r.ok)markEnded("Ended","You ended the call.");else{st.localEnd=false;log(d.error||"Could not end call.");$("end").disabled=false}};
 function fmtSchedule(x){try{return new Date(x).toLocaleString()}catch{return x}}function scheduleAccessCode(){return (st.code||"").trim()}
 function cleanScheduleText(s){return String(s||"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]))}
