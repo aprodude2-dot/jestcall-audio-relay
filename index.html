@@ -217,7 +217,7 @@ Prefer ordinary conversational wording over formal customer-service language. So
 When a simple answer is enough, give only the simple answer.
 Core rule: Say what is needed, then stop.
 These style rules do not override identity, safety, or legal-compliance instructions.`;
-const $=x=>document.getElementById(x);let sel=0,st={callId:null,relayId:null,monitor:null,monitorUrl:"",ctx:null,next:0,listenOn:false,localEnd:false,ended:false};
+const $=x=>document.getElementById(x);let sel=0,st={callId:null,relayId:null,monitor:null,monitorUrl:"",ctx:null,next:0,listenOn:false,localEnd:false,ended:false,promptSyncedFor:"",audioStarted:false};
 const ACTIVE_CALL_KEY="zilos-active-call-v1";
 function persistActiveCall(){
   if(!st.callId||st.ended){try{sessionStorage.removeItem(ACTIVE_CALL_KEY)}catch{};return}
@@ -322,7 +322,7 @@ $("start").onclick=async()=>{try{
   stopHelloGreeting();stopVoicemailWatch();vm.callSeen="";vm.sent=false;greetingCallSeen="";
   $("start").disabled=true;setStatus("Starting");$("activity").innerHTML="";log("Starting call…");
   const callBody=buildCallBody();st.callInstructions=String(callBody.detail||"");st.promptText=String(callBody.scenario||st.promptText||"");if(st.provider==="vonage")callBody.action="vonage-call";const r=await fetch(st.provider==="vonage"?"/api/audio-config":"/api/call",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(callBody)});
-  const d=await r.json();if(!r.ok)throw new Error(d.error||"Call failed");st.callId=d.call_id;st.relayId=d.relay_call_id||d.call_id;st.ended=false;st.localEnd=false;persistActiveCall();setStatus(d.status||"Queued");live(true);
+  const d=await r.json();if(!r.ok)throw new Error(d.error||"Call failed");st.callId=d.call_id;st.relayId=d.relay_call_id||d.call_id;st.promptSyncedFor="";st.ended=false;st.localEnd=false;persistActiveCall();setStatus(d.status||"Queued");live(true);
   log((st.provider==="vonage"?"Vonage":"SignalWire")+" accepted the call. Waiting for the recipient…");$("voicemailState").textContent=st.voicemailEnabled?"Waiting for call to connect…":"Detection disabled";await prep()
 }catch(e){setStatus("Not started",true);log(e.message);$("start").disabled=false}};
 async function prep(){try{const r=await fetch("/api/audio-config",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({call_id:st.relayId||st.callId,access_code:scheduleAccessCode()})});const d=await r.json();if(r.ok&&d.configured){connectMonitor(d.browser_ws_url)}else $("audioState").textContent="Audio/status monitor unavailable"}catch{$("audioState").textContent="Audio/status monitor unavailable"}}
@@ -416,7 +416,7 @@ function scanVoicemailMedia(bytes){
   }
 }
 
-function handleStatus(m){if(!m||typeof m!=="object")return;const type=m.type||m.event||"",status=m.status||(type==="call_ended"?"ended":"");if(type==="prompt_sync_ack"){log("Full prompt and AI model synced to the relay.");return}if(type==="ai_model"){log("AI brain active: "+String(m.label||m.id||"selected model"));return}if(type==="auto_hello"){log("Automatic greeting #"+String(m.attempt||"?")+" sent.");return}if(type==="voicemail_detected"){if(st.voicemailEnabled){stopHelloGreeting();vm.machineHint=true;vm.voiceMs=Math.max(vm.voiceMs,2000);vmStatus("Voicemail greeting detected — waiting for the beep.");log("Voicemail greeting detected from the live transcript.");}return}if(type!=="call_status"&&type!=="call_ended"&&status!=="ended")return;if(status==="active"){setStatus("Connected");log("Recipient connected.");$("audioState").textContent="Call connected — tap Listen live";onRecipientConnected();beginVoicemailWatch();return}if(status==="ending"&&m.reason==="recipient_request"){stopVoicemailWatch();setStatus("Ending");log("Recipient asked to end the call.");return}if(status==="ended"){if(st.localEnd)markEnded("Ended","You ended the call.");else if(m.reason==="recipient_request")markEnded("Ended","Call ended after the recipient asked to stop.");else markEnded("Hung up","The recipient hung up or the phone connection ended.");}}
+function handleStatus(m){if(!m||typeof m!=="object")return;const type=m.type||m.event||"",status=m.status||(type==="call_ended"?"ended":"");if(type==="prompt_sync_ack"){st.promptSyncedFor=st.relayId||st.callId;log(m.queued?"Full prompt queued until the call connects.":"Full prompt and AI model synced to the relay.");return}if(type==="ai_model"){log("AI brain active: "+String(m.label||m.id||"selected model"));return}if(type==="auto_hello"){log("Automatic greeting #"+String(m.attempt||"?")+" sent.");return}if(type==="voicemail_detected"){if(st.voicemailEnabled){stopHelloGreeting();vm.machineHint=true;vm.voiceMs=Math.max(vm.voiceMs,2000);vmStatus("Voicemail greeting detected — waiting for the beep.");log("Voicemail greeting detected from the live transcript.");}return}if(type!=="call_status"&&type!=="call_ended"&&status!=="ended")return;if(status==="active"){setStatus("Connected");log("Recipient connected.");$("audioState").textContent=st.listenOn?"Call connected — waiting for live audio":"Call connected — tap Listen live";onRecipientConnected();beginVoicemailWatch();return}if(status==="ending"&&m.reason==="recipient_request"){stopVoicemailWatch();setStatus("Ending");log("Recipient asked to end the call.");return}if(status==="ended"){if(st.localEnd)markEnded("Ended","You ended the call.");else if(m.reason==="recipient_request")markEnded("Ended","Call ended after the recipient asked to stop.");else markEnded("Hung up","The recipient hung up or the phone connection ended.");}}
 
 let monitorRetryTimer=null,monitorRetryDelay=1200;
 function stopMonitorRecovery(){
@@ -448,13 +448,13 @@ function connectMonitor(url){
   }
   const w=new WebSocket(st.monitorUrl||url);
   w.binaryType="arraybuffer";
-  st.monitor=w;
+  st.monitor=w;st.audioStarted=false;
   w.onopen=()=>{
     if(st.monitor!==w)return;
     monitorRetryDelay=1200;
     $("listen").disabled=false;
-    $("audioState").textContent=document.hidden?"Call active in background · monitor connected":"Status monitor connected";
-    try{
+    $("audioState").textContent=document.hidden?"Call active in background · monitor connected":"Monitor connected — waiting for call audio";
+    if(st.promptSyncedFor!==(st.relayId||st.callId))try{
       w.send(JSON.stringify({
         type:"prompt_sync",
         scenario:typeof st.promptText==="string"?st.promptText:String(st.detail||""),
@@ -472,9 +472,13 @@ function connectMonitor(url){
       return
     }
     const mediaBytes=new Uint8Array(e.data);
+    st.lastAudioAt=Date.now();
+    if(!st.audioStarted&&mediaBytes.length){st.audioStarted=true;if(st.listenOn)$("audioState").textContent="Live call audio streaming"}
     detectGreetingResponse(mediaBytes);
     scanVoicemailMedia(mediaBytes);
     if(!st.listenOn||!st.ctx)return;
+    if(st.ctx.state!=="running"){$("audioState").textContent="Tap Listen live to enable sound";$("listen").textContent="Listen live";st.listenOn=false;return}
+    if(st.next>st.ctx.currentTime+.6)st.next=st.ctx.currentTime+.02;
     const a=mu(mediaBytes),b=st.ctx.createBuffer(1,a.length,8000);
     b.copyToChannel(a,0);
     const s=st.ctx.createBufferSource();
@@ -521,7 +525,7 @@ window.addEventListener("online",reconnectMonitor);
 
 function mu(u){let out=new Float32Array(u.length);for(let i=0;i<u.length;i++){let x=(~u[i])&255,s=(x&128)?-1:1,e=(x>>4)&7,m=x&15,v=((m<<3)+132)<<e;out[i]=Math.max(-1,Math.min(1,s*(v-132)/32768))}return out}
 $("listen").onclick=async()=>{if(!st.ctx)st.ctx=new(window.AudioContext||window.webkitAudioContext)({sampleRate:8000});await st.ctx.resume();st.listenOn=!st.listenOn;st.next=st.ctx.currentTime;$("listen").textContent=st.listenOn?"Mute live audio":"Listen live";$("audioState").textContent=st.listenOn?"Listening live":"Live audio muted"};
-$("guideSend").onclick=async()=>{let m=$("guide").value.trim();if(!m||!st.callId)return;let r=await fetch("/api/guide",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({call_id:st.relayId||st.callId,message:m,access_code:scheduleAccessCode()})});let d=await r.json();if(r.ok){$("guide").value="";log((d.mode==="relevant"?"When relevant":"Next")+" director note saved.")}else log(d.error||"Guidance failed.")};
+$("guideSend").onclick=async()=>{let m=$("guide").value.trim();if(!m||!st.callId)return;$("guideSend").disabled=true;try{const r=await fetch("/api/guide",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({call_id:st.relayId||st.callId,message:m,access_code:scheduleAccessCode()})});const d=await r.json();if(!r.ok)throw Error(d.error||"Direction could not be sent.");$("guide").value="";log((d.mode==="relevant"?"When relevant":"Next")+" direction "+(d.queued?"queued until the AI finishes speaking.":"sent to the AI."))}catch(e){log("Direction failed: "+e.message)}finally{$("guideSend").disabled=st.ended}};
 $("end").onclick=async()=>{if(!st.callId)return;st.localEnd=true;$("end").disabled=true;let r=await fetch(st.provider==="vonage"?"/api/audio-config":"/api/end-call",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(st.provider==="vonage"?{action:"vonage-end",call_id:st.callId,access_code:st.code}:{provider:st.provider,call_id:st.callId,access_code:scheduleAccessCode()})});let d=await r.json();if(r.ok)markEnded("Ended","You ended the call.");else{st.localEnd=false;log(d.error||"Could not end call.");$("end").disabled=false}};
 function fmtSchedule(x){try{return new Date(x).toLocaleString()}catch{return x}}function scheduleAccessCode(){return (st.code||"").trim()}
 function cleanScheduleText(s){return String(s||"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]))}

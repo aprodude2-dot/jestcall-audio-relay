@@ -67,6 +67,6 @@ module.exports=async function(req,res){
    const {r,data}=await sw({command:"dial",params:{from:display,to,url}});
    console.log("signalwire_dial_result",r.status,JSON.stringify(data).slice(0,2000));
    if(!r.ok)return res.status(r.status).json({error:swErr(data,r.status)});
-   return res.status(200).json({success:true,provider:"signalwire",call_id:String(data.id||""),status:data.status||"Queued"});
+   return res.status(200).json({success:true,provider:"signalwire",call_id:String(data.id||""),relay_call_id:"relay:"+prompt_id,status:data.status||"Queued"});
  }catch(e){console.error("call_error",provider,e.status||"",e.message);return res.status(e.status||500).json({error:e.message||"Call failed."})}
 };

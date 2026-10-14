@@ -103,6 +103,6 @@ module.exports=async function(req,res){
     if(!BRIDGE_KEY)return send(res,503,{error:"Bridge key is not configured."});
     const r=await fetch("https://jestcall-gemini-relay.onrender.com/guide",{method:"POST",headers:{"content-type":"application/json","x-bridge-key":BRIDGE_KEY},body:JSON.stringify({call_id:id,message:msg})});
     const t=await r.text();let d={};try{d=JSON.parse(t)}catch{}
-    return r.ok?send(res,200,{success:true}):send(res,r.status,{error:d.error||"Guidance rejected."})
+    return r.ok?send(res,200,{success:true,mode:d.mode||"next",queued:!!d.queued}):send(res,r.status,{error:d.error||"Guidance rejected."})
   }catch(e){console.error("voicemail_guide",String(e.message||e).slice(0,220));return send(res,e.status||500,{error:String(e.message||e).slice(0,220)})}
 };
