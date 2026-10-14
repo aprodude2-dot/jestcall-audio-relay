@@ -171,11 +171,22 @@ function modelChoice(v){
   if(fallback)return {id:fallback[0],...fallback[1]};
   return {id:"openai:gpt-5.6-luna",...THINK_MODELS["openai:gpt-5.6-luna"]}
 }
+const DTMF_FUNCTION={
+  name:"press_keypad",
+  description:"Press a phone keypad option during an automated voice menu to reach the requested human representative or department. Call this after hearing a menu instruction such as 'press 1 for sales' or 'press 0 for an operator', instead of saying the digit aloud. Do not guess unknown menu options, enter passwords, PINs or payment details, or press keys while a human is speaking.",
+  parameters:{
+    type:"object",
+    properties:{digits:{type:"string",description:"One or more keypad buttons, using 0-9, * or #. Press the option just announced by the phone menu."}},
+    required:["digits"]
+  },
+  client_side:true
+};
+const DTMF_PROMPT="\\n\\nAUTOMATED PHONE MENUS: When an IVR asks for a keypad choice to reach a representative, invoke press_keypad with the appropriate listed digit. Do not speak the digit instead. After pressing, listen for the next menu or a human representative. Do not enter PINs, passwords or payment information.";
 function thinkSettings(id,promptText){
   const m=modelChoice(id);
   // Managed GPT-5.x models can reject non-default temperature values.
   // Omitting temperature keeps Deepgram's managed provider request valid.
-  return {provider:{type:m.type,model:m.model},prompt:promptText}
+  return {provider:{type:m.type,model:m.model},prompt:promptText+DTMF_PROMPT,functions:[DTMF_FUNCTION]}
 }
 const END_URL=process.env.RELAY_END_URL||"https://zilostools.vercel.app/api/relay-end";
 const PROMPT_STORE_URL=process.env.PROMPT_STORE_URL||"https://zilostools.vercel.app/api/prompt-store";
@@ -195,11 +206,60 @@ function softNoise(s){const white=Math.random()*2-1;s.noise=.94*s.noise+.06*whit
 function resample24to8(pcm24){const n=Math.floor(pcm24.length/2);if(n<3)return Buffer.alloc(0);const count=Math.floor(n/3),out=Buffer.alloc(count*2);let o=0;const sample=i=>{if(i<0)i=0;if(i>=n)i=n-1;return pcm24.readInt16LE(i*2)};for(let i=0;i+2<n;i+=3){const c=i+1;let v=(sample(c-2)+2*sample(c-1)+3*sample(c)+2*sample(c+1)+sample(c+2))/9;v=Math.max(-32768,Math.min(32767,v));out.writeInt16LE(v|0,o);o+=2}return out.subarray(0,o)}
 function enqueuePcm24(s,pcm24){let pcm8=resample24to8(pcm24);if(!pcm8.length)return;if(s.residual?.length){pcm8=Buffer.concat([s.residual,pcm8]);s.residual=null}const bytesPerFrame=320,full=Math.floor(pcm8.length/bytesPerFrame)*bytesPerFrame;for(let off=0;off<full;off+=bytesPerFrame){const frame=Buffer.alloc(160);for(let j=0;j<160;j++){let v=pcm8.readInt16LE(off+j*2)+softNoise(s);v=Math.max(-32635,Math.min(32635,v));frame[j]=enc(v|0)}s.outQ.push(frame)}if(full<pcm8.length)s.residual=Buffer.from(pcm8.subarray(full));if(s.outQ.length>3000)console.warn("large_audio_queue",s.cid,s.outQ.length)}
 function enqueueMulaw(s,b){if(!b?.length)return;let x=Buffer.from(b);if(s.muResidual?.length){x=Buffer.concat([s.muResidual,x]);s.muResidual=null}const full=Math.floor(x.length/160)*160;for(let off=0;off<full;off+=160)s.outQ.push(Buffer.from(x.subarray(off,off+160)));if(full<x.length)s.muResidual=Buffer.from(x.subarray(full));if(s.outQ.length>3000)console.warn("large_audio_queue",s.cid,s.outQ.length)}
+// In-band PCM DTMF for the existing SignalWire bidirectional media stream.
+const DTMF_FREQ={
+  "1":[697,1209],"2":[697,1336],"3":[697,1477],
+  "4":[770,1209],"5":[770,1336],"6":[770,1477],
+  "7":[852,1209],"8":[852,1336],"9":[852,1477],
+  "*":[941,1209],"0":[941,1336],"#":[941,1477]
+};
+function dtmfFrames(digits){
+  const frames=[];
+  for(const digit of digits){
+    const [low,high]=DTMF_FREQ[digit];
+    for(let frame=0;frame<9;frame++){
+      const b=Buffer.alloc(160);
+      for(let i=0;i<160;i++){
+        const sample=frame*160+i,time=sample/8000;
+        const edge=Math.min(1,sample/80,(1440-sample)/80);
+        b[i]=enc(Math.round(6800*edge*(Math.sin(2*Math.PI*low*time)+Math.sin(2*Math.PI*high*time))/2));
+      }
+      frames.push(b);
+    }
+    for(let silence=0;silence<4;silence++)frames.push(Buffer.alloc(160,0xff));
+  }
+  return frames
+}
+async function pressKeypad(s,rawDigits){
+  const digits=String(rawDigits||"");
+  if(!/^[0-9*#]{1,12}$/.test(digits))return {success:false,error:"Only 0-9, * and # are valid; enter at most 12 keys."};
+  if(s.ending||s.cleaned||!s.cid||!s.sid)return {success:false,error:"There is no active call."};
+  if(s.dtmfBusy||s.dtmfQ?.length||Date.now()-(s.lastDtmfAt||0)<350)return {success:false,error:"Keypad input is already in progress."};
+  s.dtmfBusy=true;
+  try{
+    if(s.provider==="vonage"){
+      const r=await fetch(END_URL,{
+        method:"POST",
+        headers:{"x-bridge-key":KEY,"content-type":"application/json"},
+        body:JSON.stringify({action:"send_dtmf",call_id:s.cid,digits}),
+        signal:AbortSignal.timeout(10000)
+      });
+      if(!r.ok){console.warn("vonage_dtmf_failed",s.cid,r.status);return {success:false,error:"Vonage did not accept keypad input."}}
+    }else{
+      if(s.sw.readyState!==WebSocket.OPEN||!s.pacer)return {success:false,error:"Audio stream is not ready."};
+      s.dtmfQ=dtmfFrames(digits);
+    }
+    s.lastDtmfAt=Date.now();
+    console.log("dtmf_sent",s.cid,s.provider,"keys",digits.length);
+    return {success:true,message:"Keypad input sent. Listen for the next menu or representative."}
+  }catch(e){console.error("dtmf_error",s.cid,String(e.message||e).slice(0,120));return {success:false,error:"Keypad input could not be delivered."}}
+  finally{s.dtmfBusy=false}
+}
 function makeRoomFrame(s){const f=Buffer.alloc(160);for(let i=0;i<160;i++)f[i]=enc(softNoise(s)|0);return f}
 function enqueueMonitorIn(s,m){if(!m?.length)return;s.monitorInBuf=s.monitorInBuf?.length?Buffer.concat([s.monitorInBuf,m]):Buffer.from(m);while(s.monitorInBuf.length>=160){s.monitorInQ.push(Buffer.from(s.monitorInBuf.subarray(0,160)));s.monitorInBuf=Buffer.from(s.monitorInBuf.subarray(160))}if(s.monitorInQ.length>50)s.monitorInQ.splice(0,s.monitorInQ.length-25)}
 function mixMonitor(outFrame,inFrame){if(!inFrame?.length)return outFrame;const n=Math.min(160,outFrame.length,inFrame.length),mixed=Buffer.alloc(160);for(let i=0;i<n;i++){let v=dec(outFrame[i])*.90+dec(inFrame[i])*.90;v=Math.max(-32635,Math.min(32635,v));mixed[i]=enc(v|0)}for(let i=n;i<160;i++)mixed[i]=i<outFrame.length?outFrame[i]:enc(0);return mixed}
-function startPacer(s){if(s.pacer)return;s.outQ=[];s.residual=null;s.noise=0;s.monitorInQ=[];s.monitorInBuf=Buffer.alloc(0);s.pacer=setInterval(()=>{if(s.ending||!s.sid||s.sw.readyState!==WebSocket.OPEN){stopPacer(s);return}const hadAi=s.outQ.length>0,frame=hadAi?s.outQ.shift():makeRoomFrame(s);try{s.sw.send(JSON.stringify({event:"media",streamSid:s.sid,media:{payload:frame.toString("base64")}}));const inbound=s.monitorInQ.length?s.monitorInQ.shift():null;/* Half-duplex monitor: when AI is talking, monitor AI only. During AI silence, monitor the recipient. */cast(s.cid,hadAi?frame:(inbound||frame))}catch(e){console.error("pacer_send_error",e.message)}if(hadAi)s.lastAiOutputAt=Date.now();if(!s.aiSpeaking&&s.outQ.length===0)flushGuides(s)},20)}
-function stopPacer(s){if(s.pacer){clearInterval(s.pacer);s.pacer=null}s.outQ=[];s.residual=null;s.monitorInQ=[];s.monitorInBuf=Buffer.alloc(0)}
+function startPacer(s){if(s.pacer)return;s.outQ=[];s.residual=null;s.noise=0;s.monitorInQ=[];s.monitorInBuf=Buffer.alloc(0);s.pacer=setInterval(()=>{if(s.ending||!s.sid||s.sw.readyState!==WebSocket.OPEN){stopPacer(s);return}const hadTone=!!s.dtmfQ?.length,hadAi=!hadTone&&s.outQ.length>0,frame=hadTone?s.dtmfQ.shift():hadAi?s.outQ.shift():makeRoomFrame(s);try{s.sw.send(JSON.stringify({event:"media",streamSid:s.sid,media:{payload:frame.toString("base64")}}));const inbound=s.monitorInQ.length?s.monitorInQ.shift():null;/* Half-duplex monitor: when AI is talking, monitor AI only. During AI silence, monitor the recipient. */cast(s.cid,(hadTone||hadAi)?frame:(inbound||frame))}catch(e){console.error("pacer_send_error",e.message)}if(hadAi)s.lastAiOutputAt=Date.now();if(!s.aiSpeaking&&s.outQ.length===0)flushGuides(s)},20)}
+function stopPacer(s){if(s.pacer){clearInterval(s.pacer);s.pacer=null}s.outQ=[];s.dtmfQ=[];s.residual=null;s.monitorInQ=[];s.monitorInBuf=Buffer.alloc(0)}
 function pcmStats(x){const n=Math.floor(x.length/2);if(!n)return{rms:0,zcr:0};let sum=0,cross=0,prev=x.readInt16LE(0);for(let i=0;i<n;i++){const v=x.readInt16LE(i*2);sum+=v*v;if(i&&((v>=0)!=(prev>=0)))cross++;prev=v}return{rms:Math.sqrt(sum/n),zcr:cross/Math.max(1,n-1)}}
 function toneRatio(x,f,sr=16000){const n=Math.floor(x.length/2);if(!n)return 0;let re=0,im=0,total=0;const w=2*Math.PI*f/sr;for(let i=0;i<n;i++){const v=x.readInt16LE(i*2);re+=v*Math.cos(w*i);im-=v*Math.sin(w*i);total+=v*v}if(total<1)return 0;return(2*(re*re+im*im))/(n*total)}
 function ringbackScore(x){return toneRatio(x,440)+toneRatio(x,480)}
@@ -483,6 +543,18 @@ async function gem(s,p){
       })();
       return
     }
+    if(type==="FunctionCallRequest"){
+      for(const fn of Array.isArray(j.functions)?j.functions:[]){
+        if(fn.name!=="press_keypad"||typeof fn.id!=="string")continue;
+        let args={};
+        try{args=typeof fn.arguments==="string"?JSON.parse(fn.arguments):typeof fn.input==="string"?JSON.parse(fn.input):fn.arguments||fn.input||{}}catch{}
+        Promise.resolve(pressKeypad(s,args.digits)).then(result=>{
+          if(g.readyState===WebSocket.OPEN&&!s.ending)
+            g.send(JSON.stringify({type:"FunctionCallResponse",id:fn.id,name:fn.name,content:JSON.stringify(result)}));
+        }).catch(e=>console.error("dtmf_function_response_error",String(e.message||e)));
+      }
+      return
+    }
     if(type==="SettingsApplied"){
       s.ready=true;{const m=modelChoice(s.aiModel);console.log("deepgram_settings_applied",s.cid,m.label,dgVoice(p.voice));sendRoomJson(s.cid,{type:"ai_model",id:m.id,label:m.label})}
       for(const b of s.preReadyAudio.splice(0))try{g.send(b)}catch{}
@@ -550,7 +622,7 @@ async function gem(s,p){
   g.on("close",(c,r)=>console.log("deepgram_close",c,String(r||"")))
 }
 function cleanup(s,reason){if(!s.cid||s.cleaned)return;s.cleaned=true;s.ending=true;stopHelloLoop(s);stopSilenceCheck(s);stopPacer(s);const r=reason||"remote_hangup",cid=s.cid;states.set(cid,{status:"ended",reason:r,at:Date.now()});console.log("call_ended",cid,r);sendStatus(cid,"ended",r);sessions.delete(cid);setTimeout(()=>{const ls=rooms.get(cid);if(ls){for(const w of[...ls])if(w.readyState===WebSocket.OPEN)try{w.close(1000,"call_ended")}catch{};rooms.delete(cid)}setTimeout(()=>states.delete(cid),30*60*1000)},1500)}
-function sw(ws){const s={sw:ws,sid:"",cid:"",g:null,ready:false,ending:false,cleaned:false,aiSpeaking:false,transcriptTail:"",guideQueue:[],modelAudioChunks:0,voicemailDetected:false,pendingPromptSync:null,heardUser:false,speechCandidateAt:0,helloStarted:false,helloActive:false,helloTimer:null,helloCount:0,helloAwaitingDone:false,answerFallbackTimer:null,silenceTimer:null,silenceCheckCount:0,silenceHelloAwaitingDone:false,farewellSpoken:false,lastAiOutputAt:0,readyAt:0,ringbackSeen:false,lastRingbackAt:0,turnStartedAt:0,lastUserTranscriptAt:0,latencyLoggedForTurn:false,preUserAudioDropLogged:false,noise:0,outQ:[],residual:null,muResidual:null,pacer:null,monitorInQ:[],monitorInBuf:Buffer.alloc(0),preReadyAudio:[],vadActive:false,noiseFloor:300,speechFrames:0,silenceFrames:0,preRoll:[],ringbackActive:false};ws.on("message",d=>{let j;try{j=JSON.parse(d.toString())}catch{return}if(j.event==="start"){const p=j.start?.customParameters||{};s.sid=String(j.start?.streamSid||j.streamSid||"");s.cid=String(j.start?.callSid||j.start?.call_sid||p.call_sid||"");if(s.cid){sessions.set(s.cid,s);sendStatus(s.cid,"active","");if(pendingPromptSyncs.has(s.cid)){s.pendingPromptSync=pendingPromptSyncs.get(s.cid);pendingPromptSyncs.delete(s.cid);console.log("prompt_sync_recovered",s.cid)}}console.log("media_stream_start",s.cid,s.sid);startPacer(s);gem(s,p);return}if(j.event==="media"&&j.media?.payload){if(j.media.track&&j.media.track!=="inbound")return;const m=Buffer.from(j.media.payload,"base64");enqueueMonitorIn(s,m);feedVAD(s,m);return}if(j.event==="stop"){try{s.g?.close()}catch{}cleanup(s,"remote_hangup")}});ws.on("close",()=>{try{s.g?.close()}catch{}cleanup(s,"remote_hangup")});ws.on("error",e=>console.error("signalwire_error",e.message))}
+function sw(ws){const s={sw:ws,sid:"",cid:"",g:null,ready:false,ending:false,cleaned:false,aiSpeaking:false,transcriptTail:"",guideQueue:[],modelAudioChunks:0,voicemailDetected:false,pendingPromptSync:null,heardUser:false,speechCandidateAt:0,helloStarted:false,helloActive:false,helloTimer:null,helloCount:0,helloAwaitingDone:false,answerFallbackTimer:null,silenceTimer:null,silenceCheckCount:0,silenceHelloAwaitingDone:false,farewellSpoken:false,lastAiOutputAt:0,readyAt:0,ringbackSeen:false,lastRingbackAt:0,turnStartedAt:0,lastUserTranscriptAt:0,latencyLoggedForTurn:false,preUserAudioDropLogged:false,noise:0,outQ:[],residual:null,muResidual:null,pacer:null,monitorInQ:[],monitorInBuf:Buffer.alloc(0),preReadyAudio:[],vadActive:false,noiseFloor:300,speechFrames:0,silenceFrames:0,preRoll:[],ringbackActive:false};ws.on("message",d=>{let j;try{j=JSON.parse(d.toString())}catch{return}if(j.event==="start"){const p=j.start?.customParameters||{};s.sid=String(j.start?.streamSid||j.streamSid||"");s.provider=String(p.provider||"signalwire").toLowerCase();s.cid=String(j.start?.callSid||j.start?.call_sid||p.call_sid||"");if(s.cid){sessions.set(s.cid,s);sendStatus(s.cid,"active","");if(pendingPromptSyncs.has(s.cid)){s.pendingPromptSync=pendingPromptSyncs.get(s.cid);pendingPromptSyncs.delete(s.cid);console.log("prompt_sync_recovered",s.cid)}}console.log("media_stream_start",s.cid,s.sid);startPacer(s);gem(s,p);return}if(j.event==="media"&&j.media?.payload){if(j.media.track&&j.media.track!=="inbound")return;const m=Buffer.from(j.media.payload,"base64");enqueueMonitorIn(s,m);feedVAD(s,m);return}if(j.event==="stop"){try{s.g?.close()}catch{}cleanup(s,"remote_hangup")}});ws.on("close",()=>{try{s.g?.close()}catch{}cleanup(s,"remote_hangup")});ws.on("error",e=>console.error("signalwire_error",e.message))}
 const server=http.createServer((q,r)=>{if(q.method==="POST"&&q.url==="/guide"){if(q.headers["x-bridge-key"]!==KEY){r.writeHead(401);return r.end()}let b="";q.on("data",c=>{if(b.length<65536)b+=c});q.on("end",()=>{let x={};try{x=JSON.parse(b)}catch{}const s=sessions.get(String(x.call_id||"")),parsed=parseGuide(clean(x.message||"",8000));if(!s||!parsed.text||!s.g||s.g.readyState!==WebSocket.OPEN){r.writeHead(404,{"content-type":"application/json"});return r.end('{"error":"active session not found"}')}const item={mode:parsed.mode,text:parsed.text};if(s.aiSpeaking||s.outQ.length)s.guideQueue.push(item);else injectGuide(s,item);r.writeHead(200,{"content-type":"application/json"});r.end(JSON.stringify({success:true,mode:parsed.mode,queued:s.aiSpeaking||s.outQ.length}))});return}r.writeHead(200,{"content-type":"application/json","cache-control":"no-store"});r.end(JSON.stringify({ok:true,deepgram_configured:!!DG(),voice_engine:"deepgram-agent",think_model:THINK_MODEL,sessions:sessions.size,rooms:rooms.size,status_tracking:true,paced_audio:true,barge_in:"confirmed-transcript",turn_detection:"deepgram-flux",hello_repeat_watchdog:true,hello_pauses_for_speech:true,hello_after_ringback:true,eot_timeout_ms:700,eot_threshold:0.6,eager_eot_threshold:0.4,pre_user_silence_gate:true,response_latency_logging:true,echo_suppressed_monitor:true,room_tone:true,room_tone_level:ROOM_LEVEL,director_guidance:true,mixed_live_monitor:true,ringback_filter:true,voicemail_transcript_detection:true,auto_hello_until_speech:true,post_response_silence_hello:true,post_response_first_check_ms:5000,post_response_repeat_ms:5000,prompt_sync:true,prompt_scenario_max:12000,prompt_detail_max:6500,transparent_identity:false,selectable_ai_models:Object.entries(THINK_MODELS).map(([id,m])=>({id,label:m.label,provider:m.type,model:m.model}))}))});
 const wss=new WebSocketServer({noServer:true});
 server.on("upgrade",(q,s,h)=>{const u=new URL(q.url,"http://x");if(u.pathname==="/signalwire"){const authOk=q.headers.authorization==="Bearer "+KEY||u.searchParams.get("token")===STREAM_TOKEN;if(!authOk){s.destroy();return}return wss.handleUpgrade(q,s,h,w=>sw(w))}if(u.searchParams.get("role")==="listener"){const id=u.searchParams.get("call_id")||"",t=u.searchParams.get("token")||"";if(!id||!eq(t,tok(id))){s.destroy();return}return wss.handleUpgrade(q,s,h,w=>{room(id).add(w);const st=states.get(id);w.send(JSON.stringify({type:"call_status",status:st?.status||(sessions.has(id)?"active":"waiting"),reason:st?.reason||""}));const ss=sessions.get(id);if(ss?.voicemailDetected)w.send(JSON.stringify({type:"voicemail_detected",status:"machine",reason:"transcript"}));w.on("message",data=>{let msg;try{msg=JSON.parse(data.toString())}catch{return}if(msg?.type!=="prompt_sync")return;const sync={scenario:msg.scenario,extra:msg.extra,detail:msg.detail,recipient:msg.recipient,ai_model:msg.ai_model};const active=sessions.get(id);if(active){injectPromptSync(active,sync)}else{pendingPromptSyncs.set(id,sync);console.log("prompt_sync_queued",id,"scenario_chars",String(msg.scenario||"").length)}try{w.send(JSON.stringify({type:"prompt_sync_ack",ok:true,queued:!active}))}catch{}});w.on("close",()=>room(id).delete(w))})}s.destroy()});
