@@ -98,7 +98,7 @@ module.exports=async function(req,res){
         return send(res,200,{success:true,status:"submitted"})
       }
     }
-    const msg=String(b.message||"").trim().slice(0,220);
+    const msg=String(b.message||"").trim().slice(0,500);
     if(!id||!msg)return send(res,400,{error:"Missing call or guidance."});
     if(!BRIDGE_KEY)return send(res,503,{error:"Bridge key is not configured."});
     const r=await fetch("https://jestcall-gemini-relay.onrender.com/guide",{method:"POST",headers:{"content-type":"application/json","x-bridge-key":BRIDGE_KEY},body:JSON.stringify({call_id:id,message:msg})});
