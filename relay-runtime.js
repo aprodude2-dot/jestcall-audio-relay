@@ -267,7 +267,8 @@ function feedVAD(s,m){
     if(s.helloTimer){clearTimeout(s.helloTimer);s.helloTimer=null}
     return
   }
-  if(s.ringbackActive&&st.rms<700){
+  // Ringback may stop directly into speech or background noise rather than silence.
+  if(s.ringbackActive&&(st.rms<700||Date.now()-(s.lastRingbackAt||0)>1400)){
     s.ringbackActive=false;
     console.log("ringback_ended",s.cid);
     if(s.ready&&!s.helloStarted&&!s.heardUser&&!s.voicemailDetected)startHelloLoop(s,INITIAL_HELLO_DELAY_MS)
@@ -394,10 +395,11 @@ function scheduleHello(s,delay=HELLO_RETRY_MS){
 }
 function sendHello(s){
   s.helloTimer=null;
-  if(s.ending||s.heardUser||s.farewellSpoken||s.helloCount>=2||s.voicemailDetected||!s.ready||!s.g||s.g.readyState!==WebSocket.OPEN)return stopHelloLoop(s);
-  if(s.ringbackActive){scheduleHello(s,900);return}
+  if(s.ending||s.heardUser||s.farewellSpoken||s.voicemailDetected||!s.ready||!s.g||s.g.readyState!==WebSocket.OPEN)return stopHelloLoop(s);
+  if(s.ringbackActive&&Date.now()-(s.lastRingbackAt||0)<1800){scheduleHello(s,900);return}
+  if(s.ringbackActive){s.ringbackActive=false;console.log("ringback_timeout_released",s.cid)}
   const sinceSpeech=s.speechCandidateAt?Date.now()-s.speechCandidateAt:Infinity;
-  if(sinceSpeech<8500){scheduleHello(s,Math.max(450,8500-sinceSpeech));return}
+  if(sinceSpeech<3500){scheduleHello(s,Math.max(450,3500-sinceSpeech));return}
   if(s.aiSpeaking||s.outQ.length){scheduleHello(s,350);return}
   if(s.lastAiOutputAt&&Date.now()-s.lastAiOutputAt<HELLO_RETRY_MS&&s.helloCount>0){
     scheduleHello(s,Math.max(450,HELLO_RETRY_MS-(Date.now()-s.lastAiOutputAt)));return;
@@ -408,7 +410,7 @@ function sendHello(s){
     s.helloCount++;s.helloActive=true;s.helloAwaitingDone=true;
     console.log("auto_hello",s.cid,"attempt",s.helloCount);
     sendRoomJson(s.cid,{type:"auto_hello",attempt:s.helloCount});
-    if(s.helloCount<2)scheduleHello(s,HELLO_RETRY_MS)
+    scheduleHello(s,HELLO_RETRY_MS)
   }catch(e){console.error("auto_hello_error",s.cid,e.message);scheduleHello(s,1800)}
 }
 function startHelloLoop(s,initialDelay=INITIAL_HELLO_DELAY_MS){
@@ -546,7 +548,7 @@ async function gem(s,p){
       if(s.answerFallbackTimer)clearTimeout(s.answerFallbackTimer);
       s.answerFallbackTimer=setTimeout(()=>{
         s.answerFallbackTimer=null;
-        if(!s.helloStarted&&!s.heardUser&&!s.voicemailDetected&&!s.ringbackActive)startHelloLoop(s,INITIAL_HELLO_DELAY_MS)
+        if(!s.helloStarted&&!s.heardUser&&!s.voicemailDetected)startHelloLoop(s,INITIAL_HELLO_DELAY_MS)
       },450);
       flushGuides(s);return
     }
@@ -574,11 +576,12 @@ async function gem(s,p){
       s.speechCandidateAt=Date.now();s.turnStartedAt=s.speechCandidateAt;s.latencyLoggedForTurn=false;
       if(s.helloTimer){clearTimeout(s.helloTimer);s.helloTimer=null}
       if(s.silenceTimer){clearTimeout(s.silenceTimer);s.silenceTimer=null}
-      if(!s.helloStarted&&!s.heardUser&&!s.voicemailDetected){
-        s.helloStarted=true;s.helloActive=true;s.helloCount=0;s.helloAwaitingDone=false
-      }
+      // A tentative VAD event is not confirmed speech. It should delay, not permanently disable, the greeting.
       console.log("recipient_speech_candidate",s.cid);
-      scheduleHello(s,8500);
+      if(!s.heardUser&&!s.voicemailDetected&&s.ready){
+        if(!s.helloStarted)startHelloLoop(s,3500);
+        else scheduleHello(s,3500)
+      }
       return
     }
     if(type==="AgentStartedSpeaking"){
