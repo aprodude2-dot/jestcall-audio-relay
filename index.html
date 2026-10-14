@@ -468,7 +468,15 @@ function connectMonitor(url){
   w.onmessage=e=>{
     if(st.monitor!==w)return;
     if(typeof e.data==="string"){
-      try{handleStatus(JSON.parse(e.data))}catch{}
+      try{
+        const msg=JSON.parse(e.data);
+        if(msg.type==="direction_status"){
+          const mode=msg.mode==="relevant"?"When relevant":"Next";
+          if(msg.status==="applied")log(mode+" direction confirmed by Deepgram. "+(msg.mode==="relevant"?"Kept for relevant parts of the conversation.":"It should influence the next response after the recipient speaks."));
+          else if(msg.status==="unconfirmed")log(mode+" direction sent, but Deepgram did not acknowledge it. It may not have taken effect.");
+          else log(mode+" direction failed: "+(msg.reason||"Deepgram rejected the change."));
+        }else handleStatus(msg)
+      }catch{}
       return
     }
     const mediaBytes=new Uint8Array(e.data);
@@ -521,7 +529,21 @@ window.addEventListener("online",reconnectMonitor);
 
 function mu(u){let out=new Float32Array(u.length);for(let i=0;i<u.length;i++){let x=(~u[i])&255,s=(x&128)?-1:1,e=(x>>4)&7,m=x&15,v=((m<<3)+132)<<e;out[i]=Math.max(-1,Math.min(1,s*(v-132)/32768))}return out}
 $("listen").onclick=async()=>{if(!st.ctx)st.ctx=new(window.AudioContext||window.webkitAudioContext)({sampleRate:8000});await st.ctx.resume();st.listenOn=!st.listenOn;st.next=st.ctx.currentTime;$("listen").textContent=st.listenOn?"Mute live audio":"Listen live";$("audioState").textContent=st.listenOn?"Listening live":"Live audio muted"};
-$("guideSend").onclick=async()=>{let m=$("guide").value.trim();if(!m||!st.callId)return;let r=await fetch("/api/guide",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({call_id:st.relayId||st.callId,message:m,access_code:scheduleAccessCode()})});let d=await r.json();if(r.ok){$("guide").value="";log((d.mode==="relevant"?"When relevant":"Next")+" director note saved.")}else log(d.error||"Guidance failed.")};
+$("guideSend").onclick=async()=>{
+  const input=$("guide"),m=input.value.trim();
+  if(!m)return;
+  if(!st.callId||st.ended){log("Directions require an active call.");return}
+  $("guideSend").disabled=true;
+  try{
+    const r=await fetch("/api/guide",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({call_id:st.relayId||st.callId,message:m,access_code:scheduleAccessCode()})});
+    let d={};try{d=await r.json()}catch{}
+    if(!r.ok||!d.success||!d.direction_id)throw Error(d.error||"AI relay did not accept the direction.");
+    input.value="";
+    const mode=d.mode==="relevant"?"When relevant":"Next";
+    log(mode+" direction "+(d.queued?"queued until the AI finishes speaking.":"forwarded. Waiting for Deepgram confirmation."));
+  }catch(e){log("Direction NOT confirmed: "+e.message)}
+  finally{if(!st.ended)$("guideSend").disabled=false}
+};
 $("end").onclick=async()=>{if(!st.callId)return;st.localEnd=true;$("end").disabled=true;let r=await fetch(st.provider==="vonage"?"/api/audio-config":"/api/end-call",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(st.provider==="vonage"?{action:"vonage-end",call_id:st.callId,access_code:st.code}:{provider:st.provider,call_id:st.callId,access_code:scheduleAccessCode()})});let d=await r.json();if(r.ok)markEnded("Ended","You ended the call.");else{st.localEnd=false;log(d.error||"Could not end call.");$("end").disabled=false}};
 function fmtSchedule(x){try{return new Date(x).toLocaleString()}catch{return x}}function scheduleAccessCode(){return (st.code||"").trim()}
 function cleanScheduleText(s){return String(s||"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]))}
