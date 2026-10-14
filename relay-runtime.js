@@ -209,7 +209,7 @@ function enc(x){const B=132,C=32635;let s=x<0?128:0;if(s)x=-x;if(x>C)x=C;x+=B;le
 function to16(b){const o=Buffer.alloc(b.length*4);let p=0;for(const u of b){const s=dec(u);o.writeInt16LE(s,p);p+=2;o.writeInt16LE(s,p);p+=2}return o}
 const RAW_LEVEL=Number(process.env.ROOM_TONE_LEVEL);
 const ROOM_LEVEL=process.env.ROOM_TONE_LEVEL===undefined?1.2:Number.isFinite(RAW_LEVEL)?Math.max(0,Math.min(RAW_LEVEL,3)):1.2;
-function softNoise(s){const white=Math.random()*2-1;s.noise=.94*s.noise+.06*white;return(s.noise*950+white*60)*ROOM_LEVEL}
+function softNoise(s){const white=Math.random()*2-1;s.noise=.94*s.noise+.06*white;return(s.noise*950+white*60)*ROOM_LEVEL*0.5}
 function resample24to8(pcm24){const n=Math.floor(pcm24.length/2);if(n<3)return Buffer.alloc(0);const count=Math.floor(n/3),out=Buffer.alloc(count*2);let o=0;const sample=i=>{if(i<0)i=0;if(i>=n)i=n-1;return pcm24.readInt16LE(i*2)};for(let i=0;i+2<n;i+=3){const c=i+1;let v=(sample(c-2)+2*sample(c-1)+3*sample(c)+2*sample(c+1)+sample(c+2))/9;v=Math.max(-32768,Math.min(32767,v));out.writeInt16LE(v|0,o);o+=2}return out.subarray(0,o)}
 function enqueuePcm24(s,pcm24){let pcm8=resample24to8(pcm24);if(!pcm8.length)return;if(s.residual?.length){pcm8=Buffer.concat([s.residual,pcm8]);s.residual=null}const bytesPerFrame=320,full=Math.floor(pcm8.length/bytesPerFrame)*bytesPerFrame;for(let off=0;off<full;off+=bytesPerFrame){const frame=Buffer.alloc(160);for(let j=0;j<160;j++){let v=pcm8.readInt16LE(off+j*2)+softNoise(s);v=Math.max(-32635,Math.min(32635,v));frame[j]=enc(v|0)}s.outQ.push(frame)}if(full<pcm8.length)s.residual=Buffer.from(pcm8.subarray(full));if(s.outQ.length>3000)console.warn("large_audio_queue",s.cid,s.outQ.length)}
 function enqueueMulaw(s,b){if(!b?.length)return;let x=Buffer.from(b);if(s.muResidual?.length){x=Buffer.concat([s.muResidual,x]);s.muResidual=null}const full=Math.floor(x.length/160)*160;for(let off=0;off<full;off+=160)s.outQ.push(Buffer.from(x.subarray(off,off+160)));if(full<x.length)s.muResidual=Buffer.from(x.subarray(full));if(s.outQ.length>3000)console.warn("large_audio_queue",s.cid,s.outQ.length)}
@@ -257,23 +257,65 @@ function composePrompt(s,extra=""){
     :"";
   return String(s.basePrompt||"")+persistent+(extra?("\n\n"+extra):"")
 }
+// Serialize Deepgram think updates so an acknowledgement belongs to the right change.
+function queueThinkUpdate(s,reason,item=null){
+  if(!s.g||!s.ready||s.g.readyState!==WebSocket.OPEN||s.ending)return false;
+  if(!s.thinkQueue)s.thinkQueue=[];
+  s.thinkQueue.push({reason,item});
+  pumpThinkUpdates(s);
+  return true
+}
+function pumpThinkUpdates(s){
+  if(s.thinkPending||!s.thinkQueue?.length||!s.g||s.g.readyState!==WebSocket.OPEN||s.ending)return;
+  const entry=s.thinkQueue.shift();
+  const note=s.nextGuide?guideText(s.nextGuide.mode,s.nextGuide.text):"";
+  try{
+    s.thinkPending=entry;
+    s.g.send(JSON.stringify({type:"UpdateThink",think:thinkSettings(s.aiModel,composePrompt(s,note))}));
+    console.log("think_update_sent",s.cid,entry.reason,entry.item?.id||"");
+    entry.timer=setTimeout(()=>finishThinkUpdate(s,"unconfirmed","No Deepgram acknowledgement within 4 seconds"),4000);
+  }catch(e){
+    s.thinkPending=null;
+    console.error("think_update_send_error",s.cid,entry.reason,e.message);
+    if(entry.item)sendRoomJson(s.cid,{type:"direction_status",direction_id:entry.item.id,mode:entry.item.mode,status:"failed",reason:"Relay could not forward direction"});
+    if(s.thinkQueue.length)setImmediate(()=>pumpThinkUpdates(s))
+  }
+}
+function finishThinkUpdate(s,status,reason=""){
+  const entry=s.thinkPending;
+  if(!entry){console.log("think_update_unmatched_ack",s.cid,status);return}
+  clearTimeout(entry.timer);s.thinkPending=null;
+  if(entry.reason==="prompt_sync"&&status==="applied")console.log("prompt_sync_confirmed",s.cid);
+  if(entry.item){
+    if(status==="applied"&&entry.item.mode==="next"&&s.nextGuide?.id===entry.item.id)s.nextGuideConfirmed=true;
+    console.log("director_status",s.cid,entry.item.id,entry.item.mode,status);
+    sendRoomJson(s.cid,{type:"direction_status",direction_id:entry.item.id,mode:entry.item.mode,status,reason});
+  }
+  if(s.thinkQueue?.length)pumpThinkUpdates(s)
+}
 function injectGuide(s,item){
   if(!s.g||!s.ready||s.g.readyState!==WebSocket.OPEN||s.ending)return false;
   const note=guideText(item.mode,item.text);
-  try{
-    if(item.mode==="relevant"){
-      if(!Array.isArray(s.relevantGuides))s.relevantGuides=[];
-      s.relevantGuides.push(note);
-      if(s.relevantGuides.length>6)s.relevantGuides.shift();
-      s.g.send(JSON.stringify({type:"UpdateThink",think:thinkSettings(s.aiModel,composePrompt(s))}));
-    }else{
-      s.restoreBasePrompt=true;
-      s.g.send(JSON.stringify({type:"UpdateThink",think:thinkSettings(s.aiModel,composePrompt(s,note))}));
-    }
-    return true
-  }catch{return false}
+  if(item.mode==="relevant"){
+    if(!Array.isArray(s.relevantGuides))s.relevantGuides=[];
+    s.relevantGuides.push(note);
+    if(s.relevantGuides.length>6)s.relevantGuides.shift();
+  }else{
+    s.nextGuide=item;
+    s.nextGuideConfirmed=false;
+    s.nextGuideUserTurn=false;
+  }
+  const accepted=queueThinkUpdate(s,"guide",item);
+  if(accepted)console.log("director_received",s.cid,item.id,item.mode,"chars",item.text.length);
+  return accepted
 }
-function flushGuides(s){if(s.aiSpeaking||s.outQ.length||!s.g||!s.ready||s.g.readyState!==WebSocket.OPEN)return;while(s.guideQueue.length){const item=s.guideQueue.shift();if(!injectGuide(s,item)){s.guideQueue.unshift(item);break}}}
+function flushGuides(s){
+  if(s.aiSpeaking||s.outQ.length||!s.g||!s.ready||s.g.readyState!==WebSocket.OPEN)return;
+  while(s.guideQueue.length){
+    const item=s.guideQueue.shift();
+    if(!injectGuide(s,item)){s.guideQueue.unshift(item);break}
+  }
+}
 // Legacy Gemini-style names mapped to closest Deepgram Aura-2 English voices.
 const VOICE_ALIASES={
   Zephyr:"aura-2-andromeda-en",Puck:"aura-2-orion-en",Charon:"aura-2-odysseus-en",Kore:"aura-2-asteria-en",
@@ -414,8 +456,8 @@ function injectPromptSync(s,data){
   try{
     const choice=modelChoice(data?.ai_model||s.aiModel);
     s.aiModel=choice.id;
-    s.g.send(JSON.stringify({type:"UpdateThink",think:thinkSettings(s.aiModel,composePrompt(s))}));
-    console.log("prompt_sync_applied",s.cid,"model",choice.label,"scenario_chars",String(data?.scenario||"").length,"detail_chars",detail.length);
+    if(!queueThinkUpdate(s,"prompt_sync"))return false;
+    console.log("prompt_sync_sent",s.cid,"model",choice.label,"scenario_chars",String(data?.scenario||"").length,"detail_chars",detail.length);
     sendRoomJson(s.cid,{type:"ai_model",id:choice.id,label:choice.label});
     return true
   }catch{return false}
@@ -527,6 +569,7 @@ async function gem(s,p){
     if(type==="ConversationText"){
       const role=String(j.role||""),tx=String(j.content||"").trim();
       if(role==="user"&&tx){
+        if(s.nextGuide&&s.nextGuideConfirmed)s.nextGuideUserTurn=true;
         s.heardUser=true;s.speechCandidateAt=0;s.lastUserTranscriptAt=Date.now();s.preUserAudioDropLogged=false;stopHelloLoop(s);stopSilenceCheck(s);
         const dropped=s.outQ.length;s.outQ=[];s.muResidual=null;s.aiSpeaking=false;
         if(dropped)console.log("confirmed_recipient_barge_in",s.cid,"dropped_frames",dropped);
@@ -562,7 +605,7 @@ async function gem(s,p){
     if(type==="AgentAudioDone"){
       console.log("deepgram_turn_complete",s.cid,"queued_frames",s.outQ.length);
       s.aiSpeaking=false;
-      if(s.restoreBasePrompt&&s.g&&s.g.readyState===WebSocket.OPEN){try{s.g.send(JSON.stringify({type:"UpdateThink",think:thinkSettings(s.aiModel,composePrompt(s))}))}catch{}s.restoreBasePrompt=false}
+      if(s.nextGuide&&s.nextGuideConfirmed&&s.nextGuideUserTurn){const used=s.nextGuide;s.nextGuide=null;s.nextGuideConfirmed=false;s.nextGuideUserTurn=false;queueThinkUpdate(s,"restore");console.log("director_next_consumed",s.cid,used.id)}
       const wasSilenceHello=s.silenceHelloAwaitingDone;
       if(s.helloAwaitingDone)s.helloAwaitingDone=false;
       if(s.silenceHelloAwaitingDone)s.silenceHelloAwaitingDone=false;
@@ -571,16 +614,37 @@ async function gem(s,p){
       }
       flushGuides(s);return
     }
-    if(type==="PromptUpdated"||type==="ThinkUpdated"||type==="SpeakUpdated")return;
+    if(type==="ThinkUpdated"){finishThinkUpdate(s,"applied");return}
+    if(type==="PromptUpdated"||type==="SpeakUpdated")return;
     if(type==="Warning"){const code=String(j.code||"");console.warn("deepgram_warning",s.cid,code,String(j.description||j.message||"").slice(0,240));if(code==="INJECT_AGENT_MESSAGE_DURING_USER_SPEECH"&&s.helloActive&&!s.heardUser&&!s.voicemailDetected){s.helloCount=Math.max(0,s.helloCount-1);scheduleHello(s,1400)}return}
-    if(type==="Error"){console.error("deepgram_error",s.cid,String(j.description||j.message||j.code||"").slice(0,300));return}
+    if(type==="Error"){const msg=String(j.description||j.message||j.code||"").slice(0,300);console.error("deepgram_error",s.cid,msg);if(s.thinkPending)finishThinkUpdate(s,"failed",msg);return}
   });
   g.on("error",e=>console.error("deepgram_socket_error",e.message));
   g.on("close",(c,r)=>console.log("deepgram_close",c,String(r||"")))
 }
 function cleanup(s,reason){if(!s.cid||s.cleaned)return;s.cleaned=true;s.ending=true;stopHelloLoop(s);stopSilenceCheck(s);stopPacer(s);const r=reason||"remote_hangup",cid=s.cid;states.set(cid,{status:"ended",reason:r,at:Date.now()});console.log("call_ended",cid,r);sendStatus(cid,"ended",r);sessions.delete(cid);setTimeout(()=>{const ls=rooms.get(cid);if(ls){for(const w of[...ls])if(w.readyState===WebSocket.OPEN)try{w.close(1000,"call_ended")}catch{};rooms.delete(cid)}setTimeout(()=>states.delete(cid),30*60*1000)},1500)}
-function sw(ws){const s={sw:ws,sid:"",cid:"",g:null,ready:false,ending:false,cleaned:false,aiSpeaking:false,transcriptTail:"",guideQueue:[],modelAudioChunks:0,voicemailDetected:false,pendingPromptSync:null,heardUser:false,speechCandidateAt:0,helloStarted:false,helloActive:false,helloTimer:null,helloCount:0,helloAwaitingDone:false,answerFallbackTimer:null,silenceTimer:null,silenceCheckCount:0,silenceHelloAwaitingDone:false,farewellSpoken:false,lastAiOutputAt:0,readyAt:0,ringbackSeen:false,lastRingbackAt:0,turnStartedAt:0,lastUserTranscriptAt:0,latencyLoggedForTurn:false,preUserAudioDropLogged:false,noise:0,outQ:[],residual:null,muResidual:null,pacer:null,monitorInQ:[],monitorInBuf:Buffer.alloc(0),preReadyAudio:[],vadActive:false,noiseFloor:300,speechFrames:0,silenceFrames:0,preRoll:[],ringbackActive:false};ws.on("message",d=>{let j;try{j=JSON.parse(d.toString())}catch{return}if(j.event==="start"){const p=j.start?.customParameters||{};s.sid=String(j.start?.streamSid||j.streamSid||"");s.cid=String(j.start?.callSid||j.start?.call_sid||p.call_sid||"");if(s.cid){sessions.set(s.cid,s);sendStatus(s.cid,"active","");if(pendingPromptSyncs.has(s.cid)){s.pendingPromptSync=pendingPromptSyncs.get(s.cid);pendingPromptSyncs.delete(s.cid);console.log("prompt_sync_recovered",s.cid)}}console.log("media_stream_start",s.cid,s.sid);startPacer(s);gem(s,p);return}if(j.event==="media"&&j.media?.payload){if(j.media.track&&j.media.track!=="inbound")return;const m=Buffer.from(j.media.payload,"base64");enqueueMonitorIn(s,m);feedVAD(s,m);return}if(j.event==="stop"){try{s.g?.close()}catch{}cleanup(s,"remote_hangup")}});ws.on("close",()=>{try{s.g?.close()}catch{}cleanup(s,"remote_hangup")});ws.on("error",e=>console.error("signalwire_error",e.message))}
-const server=http.createServer((q,r)=>{if(q.method==="POST"&&q.url==="/guide"){if(q.headers["x-bridge-key"]!==KEY){r.writeHead(401);return r.end()}let b="";q.on("data",c=>{if(b.length<65536)b+=c});q.on("end",()=>{let x={};try{x=JSON.parse(b)}catch{}const s=sessions.get(String(x.call_id||"")),parsed=parseGuide(clean(x.message||"",8000));if(!s||!parsed.text||!s.g||s.g.readyState!==WebSocket.OPEN){r.writeHead(404,{"content-type":"application/json"});return r.end('{"error":"active session not found"}')}const item={mode:parsed.mode,text:parsed.text};if(s.aiSpeaking||s.outQ.length)s.guideQueue.push(item);else injectGuide(s,item);r.writeHead(200,{"content-type":"application/json"});r.end(JSON.stringify({success:true,mode:parsed.mode,queued:s.aiSpeaking||s.outQ.length}))});return}r.writeHead(200,{"content-type":"application/json","cache-control":"no-store"});r.end(JSON.stringify({ok:true,deepgram_configured:!!DG(),voice_engine:"deepgram-agent",think_model:THINK_MODEL,sessions:sessions.size,rooms:rooms.size,status_tracking:true,paced_audio:true,barge_in:"confirmed-transcript",turn_detection:"deepgram-flux",hello_repeat_watchdog:true,hello_pauses_for_speech:true,hello_after_ringback:true,eot_timeout_ms:700,eot_threshold:0.6,eager_eot_threshold:0.4,pre_user_silence_gate:true,response_latency_logging:true,echo_suppressed_monitor:true,room_tone:true,room_tone_level:ROOM_LEVEL,director_guidance:true,mixed_live_monitor:true,ringback_filter:true,voicemail_transcript_detection:true,auto_hello_until_speech:true,post_response_silence_hello:true,post_response_first_check_ms:5000,post_response_repeat_ms:5000,prompt_sync:true,prompt_scenario_max:12000,prompt_detail_max:6500,transparent_identity:false,selectable_ai_models:Object.entries(THINK_MODELS).map(([id,m])=>({id,label:m.label,provider:m.type,model:m.model}))}))});
+function sw(ws){const s={sw:ws,sid:"",cid:"",g:null,ready:false,ending:false,cleaned:false,aiSpeaking:false,transcriptTail:"",guideQueue:[],modelAudioChunks:0,voicemailDetected:false,pendingPromptSync:null,heardUser:false,speechCandidateAt:0,helloStarted:false,helloActive:false,helloTimer:null,helloCount:0,helloAwaitingDone:false,answerFallbackTimer:null,silenceTimer:null,silenceCheckCount:0,silenceHelloAwaitingDone:false,farewellSpoken:false,lastAiOutputAt:0,readyAt:0,ringbackSeen:false,lastRingbackAt:0,turnStartedAt:0,lastUserTranscriptAt:0,latencyLoggedForTurn:false,preUserAudioDropLogged:false,noise:0,thinkQueue:[],thinkPending:null,nextGuide:null,nextGuideConfirmed:false,nextGuideUserTurn:false,outQ:[],residual:null,muResidual:null,pacer:null,monitorInQ:[],monitorInBuf:Buffer.alloc(0),preReadyAudio:[],vadActive:false,noiseFloor:300,speechFrames:0,silenceFrames:0,preRoll:[],ringbackActive:false};ws.on("message",d=>{let j;try{j=JSON.parse(d.toString())}catch{return}if(j.event==="start"){const p=j.start?.customParameters||{};s.sid=String(j.start?.streamSid||j.streamSid||"");s.cid=String(j.start?.callSid||j.start?.call_sid||p.call_sid||"");if(s.cid){sessions.set(s.cid,s);sendStatus(s.cid,"active","");if(pendingPromptSyncs.has(s.cid)){s.pendingPromptSync=pendingPromptSyncs.get(s.cid);pendingPromptSyncs.delete(s.cid);console.log("prompt_sync_recovered",s.cid)}}console.log("media_stream_start",s.cid,s.sid);startPacer(s);gem(s,p);return}if(j.event==="media"&&j.media?.payload){if(j.media.track&&j.media.track!=="inbound")return;const m=Buffer.from(j.media.payload,"base64");enqueueMonitorIn(s,m);feedVAD(s,m);return}if(j.event==="stop"){try{s.g?.close()}catch{}cleanup(s,"remote_hangup")}});ws.on("close",()=>{try{s.g?.close()}catch{}cleanup(s,"remote_hangup")});ws.on("error",e=>console.error("signalwire_error",e.message))}
+const server=http.createServer((q,r)=>{if(q.method==="POST"&&q.url==="/guide"){
+  if(q.headers["x-bridge-key"]!==KEY){r.writeHead(401);return r.end()}
+  let b="";
+  q.on("data",c=>{if(b.length<65536)b+=c});
+  q.on("end",()=>{
+    let x={};try{x=JSON.parse(b)}catch{}
+    const s=sessions.get(String(x.call_id||"")),parsed=parseGuide(clean(x.message||"",500));
+    if(!s||!parsed.text||!s.g||!s.ready||s.g.readyState!==WebSocket.OPEN||s.ending){
+      console.log("director_rejected",String(x.call_id||""),"inactive_or_unready");
+      r.writeHead(404,{"content-type":"application/json"});return r.end('{"error":"Active AI session is not ready for Directions."}')
+    }
+    const item={id:crypto.randomUUID(),mode:parsed.mode,text:parsed.text};
+    const queued=!!(s.aiSpeaking||s.outQ.length||s.guideQueue.length);
+    if(queued){s.guideQueue.push(item);console.log("director_queued",s.cid,item.id,item.mode)}
+    else if(!injectGuide(s,item)){r.writeHead(503,{"content-type":"application/json"});return r.end('{"error":"Could not submit direction to AI."}')}
+    r.writeHead(202,{"content-type":"application/json"});
+    r.end(JSON.stringify({success:true,status:queued?"queued":"pending_confirmation",queued,mode:item.mode,direction_id:item.id}))
+  });
+  return
+}
+r.writeHead(200,{"content-type":"application/json","cache-control":"no-store"});r.end(JSON.stringify({ok:true,deepgram_configured:!!DG(),voice_engine:"deepgram-agent",think_model:THINK_MODEL,sessions:sessions.size,rooms:rooms.size,status_tracking:true,paced_audio:true,barge_in:"confirmed-transcript",turn_detection:"deepgram-flux",hello_repeat_watchdog:true,hello_pauses_for_speech:true,hello_after_ringback:true,eot_timeout_ms:700,eot_threshold:0.6,eager_eot_threshold:0.4,pre_user_silence_gate:true,response_latency_logging:true,echo_suppressed_monitor:true,room_tone:true,room_tone_level:ROOM_LEVEL*0.5,director_guidance:true,mixed_live_monitor:true,ringback_filter:true,voicemail_transcript_detection:true,auto_hello_until_speech:true,post_response_silence_hello:true,post_response_first_check_ms:5000,post_response_repeat_ms:5000,prompt_sync:true,prompt_scenario_max:12000,prompt_detail_max:6500,transparent_identity:false,selectable_ai_models:Object.entries(THINK_MODELS).map(([id,m])=>({id,label:m.label,provider:m.type,model:m.model}))}))});
 const wss=new WebSocketServer({noServer:true});
 server.on("upgrade",(q,s,h)=>{const u=new URL(q.url,"http://x");if(u.pathname==="/signalwire"){const authOk=q.headers.authorization==="Bearer "+KEY||u.searchParams.get("token")===STREAM_TOKEN;if(!authOk){s.destroy();return}return wss.handleUpgrade(q,s,h,w=>sw(w))}if(u.searchParams.get("role")==="listener"){const id=u.searchParams.get("call_id")||"",t=u.searchParams.get("token")||"";if(!id||!eq(t,tok(id))){s.destroy();return}return wss.handleUpgrade(q,s,h,w=>{room(id).add(w);const st=states.get(id);w.send(JSON.stringify({type:"call_status",status:st?.status||(sessions.has(id)?"active":"waiting"),reason:st?.reason||""}));const ss=sessions.get(id);if(ss?.voicemailDetected)w.send(JSON.stringify({type:"voicemail_detected",status:"machine",reason:"transcript"}));w.on("message",data=>{let msg;try{msg=JSON.parse(data.toString())}catch{return}if(msg?.type!=="prompt_sync")return;const sync={scenario:msg.scenario,extra:msg.extra,detail:msg.detail,recipient:msg.recipient,ai_model:msg.ai_model};const active=sessions.get(id);if(active){injectPromptSync(active,sync)}else{pendingPromptSyncs.set(id,sync);console.log("prompt_sync_queued",id,"scenario_chars",String(msg.scenario||"").length)}try{w.send(JSON.stringify({type:"prompt_sync_ack",ok:true,queued:!active}))}catch{}});w.on("close",()=>room(id).delete(w))})}s.destroy()});
 server.listen(process.env.PORT||10000,"0.0.0.0",()=>console.log("zilostools_relay_ready hello-silence-lowlatency-2026-10-07"));
