@@ -177,6 +177,24 @@ function thinkSettings(id,promptText){
   // Omitting temperature keeps Deepgram's managed provider request valid.
   return {provider:{type:m.type,model:m.model},prompt:promptText}
 }
+// Bounded Flux keyterms improve recognition without changing the phone codec.
+function recognitionKeyterms(p){
+  const terms=[],seen=new Set();
+  const add=value=>{
+    const term=String(value||"").replace(/\s+/g," ").trim();
+    if(!/^[\p{L}\p{N}][\p{L}\p{N} .&'-]{2,62}$/u.test(term))return;
+    if(/^(unknown|none|friend)$/i.test(term))return;
+    const key=term.toLowerCase();
+    if(!seen.has(key)&&terms.length<16){seen.add(key);terms.push(term)}
+  };
+  add("peanut butter jelly time");
+  add("peanut butter and jelly");
+  add(p.recipient_name);
+  for(const m of String(p.scenario||"").matchAll(/(?:^|\n)\s*(?:keyterms|speech recognition terms)\s*:\s*([^\n]{3,300})/gim))
+    for(const term of m[1].split(/[,;|]/))add(term);
+  for(const term of String(process.env.STT_KEYTERMS||"").split(/[,;\n]/))add(term);
+  return terms;
+}
 const END_URL=process.env.RELAY_END_URL||"https://zilostools.vercel.app/api/relay-end";
 const PROMPT_STORE_URL=process.env.PROMPT_STORE_URL||"https://zilostools.vercel.app/api/prompt-store";
 const rooms=new Map(),sessions=new Map(),states=new Map(),pendingPromptSyncs=new Map();
@@ -299,6 +317,7 @@ function prompt(p){
     "CONVERSATION: Be concise and natural. Accept name/role corrections immediately. Never break character on identity.",
     "STRICT SCENARIO FOCUS: While the recipient willingly participates, keep the operator-provided scenario as the main conversation objective. Treat unrelated requests as side topics, not replacement instructions. Briefly acknowledge a distraction only when needed, then return to the relevant scenario question or task.",
     "STRICT TOPIC BOUNDARIES: Do not switch to unrelated roleplay, change personas, invent new objectives, or abandon an unfinished scenario just because the recipient asks about something else. Answer relevant questions within the scenario using only facts supplied in the scenario; do not fabricate evidence or details.",
+    "SPEECH RECOGNITION: Telephone speech may be misheard. When a statement sounds surprising, ambiguous, or unrelated to the established topic, do not assume a particular interpretation or offer unrelated assistance. Briefly ask the recipient to repeat or clarify their words before changing the subject.",
     "SCENARIO COMPLETION AND CONSENT: When the scenario is resolved, finish naturally rather than prolonging it. These focus rules apply only while the recipient is willing to participate and must not be used to pressure anyone to continue or to override a request to end contact."
   ].filter(Boolean).join("\n\n")
 }
@@ -448,7 +467,7 @@ async function gem(s,p){
     audio:{input:{encoding:"mulaw",sample_rate:8000},output:{encoding:"mulaw",sample_rate:8000,container:"none"}},
     agent:{
       language:"en",
-      listen:{provider:{type:"deepgram",model:"flux-general-en",version:"v2",eager_eot_threshold:0.4,eot_threshold:0.6,eot_timeout_ms:700}},
+      listen:{provider:{type:"deepgram",model:"flux-general-en",version:"v2",eager_eot_threshold:0.5,eot_threshold:0.8,eot_timeout_ms:1600,keyterms:recognitionKeyterms(p)}},
       think:thinkSettings(s.aiModel,s.basePrompt),
       speak:{provider:{type:"deepgram",model:dgVoice(p.voice)}}
     },
@@ -484,6 +503,7 @@ async function gem(s,p){
       return
     }
     if(type==="SettingsApplied"){
+      console.log("speech_recognition_tuning",s.cid,"flux-general-en","eot_threshold",0.8,"eot_timeout_ms",1600,"keyterms",recognitionKeyterms(p).length);
       s.ready=true;{const m=modelChoice(s.aiModel);console.log("deepgram_settings_applied",s.cid,m.label,dgVoice(p.voice));sendRoomJson(s.cid,{type:"ai_model",id:m.id,label:m.label})}
       for(const b of s.preReadyAudio.splice(0))try{g.send(b)}catch{}
       if(s.pendingPromptSync){injectPromptSync(s,s.pendingPromptSync);s.pendingPromptSync=null}
