@@ -236,6 +236,7 @@ async function restoreActiveCall(){
   let x=null;try{x=JSON.parse(sessionStorage.getItem(ACTIVE_CALL_KEY)||"null")}catch{}
   if(!x||!x.callId||Date.now()-Number(x.savedAt||0)>2*60*60*1000){clearActiveCall();return}
   Object.assign(st,x,{monitor:null,monitorUrl:"",ctx:null,next:0,listenOn:true,localEnd:false,ended:false});
+  if(st.provider==="signalwire")st.relayId=st.callId; // Older saved calls may contain an incompatible relay: ID.
   $("listen").textContent="Mute live audio";
   try{if(!st.ctx)st.ctx=new(window.AudioContext||window.webkitAudioContext)({sampleRate:8000,latencyHint:"interactive"});st.ctx.resume().catch(()=>{});st.next=st.ctx.currentTime}catch{}
   if($("code"))$("code").value=st.code||"";
@@ -322,7 +323,7 @@ $("start").onclick=async()=>{try{
   stopHelloGreeting();stopVoicemailWatch();vm.callSeen="";vm.sent=false;greetingCallSeen="";
   $("start").disabled=true;setStatus("Starting");$("activity").innerHTML="";log("Starting call…");
   const callBody=buildCallBody();st.callInstructions=String(callBody.detail||"");st.promptText=String(callBody.scenario||st.promptText||"");if(st.provider==="vonage")callBody.action="vonage-call";const r=await fetch(st.provider==="vonage"?"/api/audio-config":"/api/call",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(callBody)});
-  const d=await r.json();if(!r.ok)throw new Error(d.error||"Call failed");st.callId=d.call_id;st.relayId=d.relay_call_id||d.call_id;st.promptSyncedFor="";st.ended=false;st.localEnd=false;persistActiveCall();setStatus(d.status||"Queued");live(true);
+  const d=await r.json();if(!r.ok)throw new Error(d.error||"Call failed");st.callId=d.call_id;st.relayId=st.provider==="signalwire"?d.call_id:(d.relay_call_id||d.call_id);st.promptSyncedFor="";st.ended=false;st.localEnd=false;persistActiveCall();setStatus(d.status||"Queued");live(true);
   log((st.provider==="vonage"?"Vonage":"SignalWire")+" accepted the call. Waiting for the recipient…");$("voicemailState").textContent=st.voicemailEnabled?"Waiting for call to connect…":"Detection disabled";await prep()
 }catch(e){setStatus("Not started",true);log(e.message);$("start").disabled=false}};
 async function prep(){try{const r=await fetch("/api/audio-config",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({call_id:st.relayId||st.callId,access_code:scheduleAccessCode()})});const d=await r.json();if(r.ok&&d.configured){connectMonitor(d.browser_ws_url)}else $("audioState").textContent="Audio/status monitor unavailable"}catch{$("audioState").textContent="Audio/status monitor unavailable"}}
