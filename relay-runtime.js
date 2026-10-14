@@ -181,7 +181,7 @@ const DTMF_FUNCTION={
   },
   client_side:true
 };
-const DTMF_PROMPT="\\n\\nAUTOMATED PHONE MENUS: When an IVR asks for a keypad choice to reach a representative, invoke press_keypad with the appropriate listed digit. Do not speak the digit instead. After pressing, listen for the next menu or a human representative. Do not enter PINs, passwords or payment information.";
+const DTMF_PROMPT="\n\nAUTOMATED PHONE MENUS: When an IVR asks for a keypad choice to reach a representative, invoke press_keypad with the appropriate listed digit. Do not speak the digit instead. After pressing, listen for the next menu or a human representative. Do not enter PINs, passwords or payment information.";
 function thinkSettings(id,promptText){
   const m=modelChoice(id);
   // Managed GPT-5.x models can reject non-default temperature values.
